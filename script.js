@@ -17,7 +17,14 @@
     },
     // A3: LEDs externos conectados. Cada LED: { id, color, pin, resistorOhms, groundPin, on }.
     leds: [],
-    ledSeq: 0        // contador para identificadores únicos (no se reutilizan)
+    ledSeq: 0,       // contador para identificadores únicos (no se reutilizan)
+    // A4: programa del estudiante y su último análisis.
+    program: {
+      code: '',           // texto del editor
+      analysis: null,     // resultado de ArduinoParser.parse (+ pinInfo)
+      analyzedCode: null, // código que produjo ese análisis
+      stale: false        // false | 'code' | 'connections': el análisis ya no es vigente
+    }
   };
 
   /* ---------- Registro de vistas ---------- */
@@ -1390,34 +1397,983 @@
     }
   };
 
-  /* ---------- Preparación de vistas (contenido estático) ---------- */
-  var DEMO_CODE = [
-    '// Ejemplo de demostración (todavía no se ejecuta)',
-    'void setup() {',
-    '  pinMode(13, OUTPUT);',
-    '}',
-    '',
-    'void loop() {',
-    '  digitalWrite(13, HIGH);',
-    '  delay(1000);',
-    '  digitalWrite(13, LOW);',
-    '  delay(1000);',
-    '}'
+  /* =========================================================
+     A4: analizador del lenguaje Arduino simplificado.
+     Función pura: recibe texto y devuelve un resultado. No evalúa
+     código dinámicamente ni usa el DOM: nunca ejecuta el texto del estudiante.
+     Lenguaje admitido:
+       void setup() { ... }   void loop() { ... }
+       pinMode(pin, OUTPUT);  digitalWrite(pin, HIGH | LOW);  delay(ms);
+       Comentarios con //. Pines enteros 2–13. delay entero 0–60000.
+     ========================================================= */
+  var ArduinoParser = (function () {
+    var LIMITS = { chars: 3000, lines: 150, maxDelay: 60000, minPin: 2, maxPin: 13 };
+
+    var INSTRUCTIONS = {
+      pinMode: { args: 2, usage: 'pinMode(8, OUTPUT);' },
+      digitalWrite: { args: 2, usage: 'digitalWrite(8, HIGH);' },
+      delay: { args: 1, usage: 'delay(1000);' }
+    };
+
+    // Estructuras de C++ que este simulador todavía no admite.
+    var UNSUPPORTED_BLOCKS = ['for', 'if', 'else', 'while', 'do', 'switch', 'int', 'long', 'float', 'bool',
+      'boolean', 'byte', 'char', 'const', 'return', 'unsigned', 'String', 'define', 'include'];
+
+    // Para detectar errores de mayúsculas: "digitalwrite" → "digitalWrite".
+    var BY_LOWERCASE = {};
+    ['pinMode', 'digitalWrite', 'delay', 'setup', 'loop', 'void'].forEach(function (word) {
+      BY_LOWERCASE[word.toLowerCase()] = word;
+    });
+
+    function distance(a, b) {
+      var row = [];
+      for (var j = 0; j <= b.length; j++) { row.push(j); }
+      for (var i = 1; i <= a.length; i++) {
+        var prev = row[0];
+        row[0] = i;
+        for (var k = 1; k <= b.length; k++) {
+          var temp = row[k];
+          row[k] = Math.min(row[k] + 1, row[k - 1] + 1, prev + (a[i - 1] === b[k - 1] ? 0 : 1));
+          prev = temp;
+        }
+      }
+      return row[b.length];
+    }
+
+    function looksLike(word, target, maxDistance) {
+      var upper = word.toUpperCase();
+      return upper === target || distance(upper, target) <= maxDistance;
+    }
+
+    /* ---------- Tokenizador ---------- */
+    function tokenize(code, report) {
+      var tokens = [];
+      var line = 1;
+      var i = 0;
+      var n = code.length;
+      var badLines = {};
+      while (i < n) {
+        var ch = code.charAt(i);
+        if (ch === '\n') { line += 1; i += 1; continue; }
+        if (ch === ' ' || ch === '\t' || ch === '\r') { i += 1; continue; }
+        if (ch === '/' && code.charAt(i + 1) === '/') {
+          while (i < n && code.charAt(i) !== '\n') { i += 1; }
+          continue;
+        }
+        if (ch === '/' && code.charAt(i + 1) === '*') {
+          report.error(line, 'en este simulador los comentarios se escriben con // al inicio.');
+          var end = code.indexOf('*/', i + 2);
+          var stop = end === -1 ? n : end + 2;
+          for (; i < stop; i++) { if (code.charAt(i) === '\n') { line += 1; } }
+          continue;
+        }
+        var start = i;
+        if (/[A-Za-z_]/.test(ch)) {
+          while (i < n && /[A-Za-z0-9_]/.test(code.charAt(i))) { i += 1; }
+          tokens.push({ type: 'ident', value: code.slice(start, i), line: line });
+          continue;
+        }
+        if (/[0-9]/.test(ch)) {
+          while (i < n && /[0-9.]/.test(code.charAt(i))) { i += 1; }
+          tokens.push({ type: 'number', value: code.slice(start, i), line: line });
+          continue;
+        }
+        if ('(){};,-'.indexOf(ch) !== -1) {
+          tokens.push({ type: ch, value: ch, line: line });
+          i += 1;
+          continue;
+        }
+        if (!badLines[line]) {
+          badLines[line] = true;
+          report.error(line, 'el símbolo «' + ch + '» no forma parte del lenguaje del simulador.');
+        }
+        i += 1;
+      }
+      tokens.push({ type: 'eof', value: 'fin del programa', line: line });
+      return tokens;
+    }
+
+    /* ---------- Analizador sintáctico (descenso recursivo) ---------- */
+    function Parser(tokens, report) {
+      this.tokens = tokens;
+      this.pos = 0;
+      this.report = report;
+      this.functions = {};
+    }
+
+    Parser.prototype.peek = function (offset) {
+      var index = Math.min(this.pos + (offset || 0), this.tokens.length - 1);
+      return this.tokens[index];
+    };
+
+    Parser.prototype.next = function () {
+      var token = this.peek();
+      if (this.pos < this.tokens.length - 1) { this.pos += 1; }
+      return token;
+    };
+
+    /* Salta hasta terminar la instrucción actual (; consumido) sin salir del bloque. */
+    Parser.prototype.skipStatement = function (line) {
+      while (true) {
+        var t = this.peek();
+        if (t.type === 'eof' || t.type === '}' || t.type === '{') { return; }
+        if (t.type === ';') { this.next(); return; }
+        if (t.line !== line && t.type === 'ident') { return; }
+        this.next();
+      }
+    };
+
+    /* Salta una estructura no admitida (for, if, int x = …) con sus paréntesis
+       y su bloque { } balanceados, para no generar errores en cadena. */
+    Parser.prototype.skipBlock = function (line) {
+      var depthParen = 0;
+      while (true) {
+        var t = this.peek();
+        if (t.type === 'eof') { return; }
+        if (t.type === '(') { depthParen += 1; }
+        if (t.type === ')') { depthParen -= 1; }
+        if (t.type === '}' && depthParen <= 0) { return; }
+        if (t.type === ';' && depthParen <= 0) { this.next(); return; }
+        if (t.type === '{' && depthParen <= 0) {
+          var depth = 0;
+          while (this.peek().type !== 'eof') {
+            var b = this.next();
+            if (b.type === '{') { depth += 1; }
+            if (b.type === '}') { depth -= 1; if (depth === 0) { return; } }
+          }
+          return;
+        }
+        this.next();
+      }
+    };
+
+    Parser.prototype.parseProgram = function () {
+      while (this.peek().type !== 'eof') {
+        var t = this.peek();
+        if (t.type === 'ident' && t.value === 'void') {
+          this.next();
+          this.parseFunction(t);
+        } else if (t.type === 'ident' && t.value.toLowerCase() === 'void') {
+          this.report.error(t.line, 'escribe void con minúsculas.');
+          this.next();
+          this.parseFunction(t);
+        } else if (t.type === 'ident' && this.peek(1).type === 'ident' && this.peek(2).type === '(') {
+          this.report.error(t.line, 'en este simulador las funciones empiezan con la palabra void.');
+          this.next();
+          this.parseFunction(t);
+        } else if (t.type === 'ident' && UNSUPPORTED_BLOCKS.indexOf(t.value) !== -1) {
+          this.report.error(t.line, 'esa instrucción (' + t.value + ') todavía no está disponible en nuestro simulador. Escribe los números directamente, por ejemplo pinMode(8, OUTPUT);');
+          this.next();
+          this.skipBlock(t.line);
+        } else if (t.type === '}') {
+          this.report.error(t.line, 'sobra una llave }. Revisa que cada { tenga una sola }.');
+          this.next();
+        } else if (t.type === 'ident' && this.peek(1).type === '(') {
+          this.report.error(t.line, 'las instrucciones deben ir dentro de setup() o loop().');
+          this.next();
+          this.skipStatement(t.line);
+        } else {
+          this.report.error(t.line, 'no entiendo «' + t.value + '». Revisa cómo está escrito.');
+          this.next();
+        }
+      }
+    };
+
+    Parser.prototype.parseFunction = function (voidToken) {
+      var nameToken = this.peek();
+      if (nameToken.type !== 'ident') {
+        this.report.error(voidToken.line, 'después de void escribe el nombre de la función: setup o loop.');
+        return;
+      }
+      this.next();
+      var name = nameToken.value;
+      var valid = true;
+      if (name !== 'setup' && name !== 'loop') {
+        var fixed = BY_LOWERCASE[name.toLowerCase()];
+        if (fixed === 'setup' || fixed === 'loop') {
+          this.report.error(nameToken.line, 'revisa mayúsculas y minúsculas: se escribe ' + fixed + '.');
+          name = fixed;
+        } else {
+          this.report.error(nameToken.line, 'en este simulador solo puedes usar las funciones setup() y loop().');
+          valid = false;
+        }
+      }
+
+      // Paréntesis vacíos
+      if (this.peek().type === '(') {
+        this.next();
+        if (this.peek().type !== ')') {
+          if (this.peek().type !== '{') {
+            this.report.error(nameToken.line, 'la función ' + name + '() no lleva nada entre los paréntesis.');
+          }
+          while (this.peek().type !== ')' && this.peek().type !== '{' && this.peek().type !== 'eof') { this.next(); }
+        }
+        if (this.peek().type === ')') {
+          this.next();
+        } else {
+          this.report.error(nameToken.line, 'falta cerrar el paréntesis ) de ' + name + '().');
+        }
+      } else {
+        this.report.error(nameToken.line, 'después de ' + name + ' escribe paréntesis: ' + name + '().');
+      }
+
+      var openLine = nameToken.line;
+      if (this.peek().type === '{') {
+        openLine = this.next().line;
+      } else {
+        this.report.error(nameToken.line, 'después de ' + name + '() debe ir una llave {.');
+      }
+
+      var actions = [];
+      while (true) {
+        var t = this.peek();
+        if (t.type === '}') { this.next(); break; }
+        if (t.type === 'eof') {
+          this.report.error(openLine, 'la función ' + name + '() abre una llave { que nunca se cierra. Agrega } al final de la función.');
+          break;
+        }
+        if (t.type === 'ident' && t.value.toLowerCase() === 'void') {
+          this.report.error(openLine, 'la función ' + name + '() no se cerró. Agrega } antes de la siguiente función.');
+          break;
+        }
+        if (t.type === '{') {
+          this.report.error(t.line, 'sobra una llave {.');
+          this.next();
+          continue;
+        }
+        this.parseStatement(actions, name);
+      }
+
+      if (!valid) { return; }
+      if (this.functions[name]) {
+        this.report.error(nameToken.line, 'el programa ya tiene una función ' + name + '(). Solo puede haber una.');
+        return;
+      }
+      this.functions[name] = { line: nameToken.line, actions: actions };
+    };
+
+    Parser.prototype.readArg = function () {
+      var t = this.peek();
+      if (t.type === '-' && this.peek(1).type === 'number') {
+        this.next();
+        var num = this.next();
+        return { kind: 'number', raw: '-' + num.value, value: -Number(num.value), integer: false, line: t.line };
+      }
+      if (t.type === 'number') {
+        this.next();
+        return { kind: 'number', raw: t.value, value: Number(t.value), integer: /^\d+$/.test(t.value), line: t.line };
+      }
+      if (t.type === 'ident') {
+        this.next();
+        return { kind: 'ident', raw: t.value, line: t.line };
+      }
+      return null;
+    };
+
+    Parser.prototype.parseStatement = function (actions, fnName) {
+      var report = this.report;
+      var t = this.next();
+      if (t.type === ';') { return; } // instrucción vacía: válida en C++
+      if (t.type !== 'ident') {
+        report.error(t.line, 'no entiendo «' + t.value + '» en este lugar.');
+        return;
+      }
+      var name = t.value;
+      var line = t.line;
+      var known = INSTRUCTIONS[name] || INSTRUCTIONS[BY_LOWERCASE[name.toLowerCase()]];
+
+      if (UNSUPPORTED_BLOCKS.indexOf(name) !== -1) {
+        report.error(line, 'esa instrucción (' + name + ') todavía no está disponible en nuestro simulador.');
+        this.skipBlock(line);
+        return;
+      }
+
+      if (this.peek().type !== '(') {
+        if (known) {
+          report.error(line, 'después de ' + name + ' van paréntesis. Ejemplo: ' + known.usage);
+        } else {
+          report.error(line, 'no entiendo «' + name + '». Revisa cómo está escrito.');
+        }
+        this.skipStatement(line);
+        return;
+      }
+      this.next(); // (
+
+      var args = [];
+      var argsOk = true;
+      var closed = false;
+      var closeLine = line;
+      var guard = 0;
+      while (guard++ < 200) {
+        var a = this.peek();
+        if (a.type === ')') { closeLine = this.next().line; closed = true; break; }
+        if (a.type === ';' || a.type === '{' || a.type === '}' || a.type === 'eof' ||
+            (a.line !== line && a.type === 'ident' && this.peek(1).type === '(')) {
+          report.error(line, 'falta cerrar el paréntesis ) en ' + name + '(...).');
+          argsOk = false;
+          break;
+        }
+        if (args.length > 0 || a.type === ',') {
+          if (a.type === ',') {
+            this.next();
+            if (args.length === 0 || this.peek().type === ')' || this.peek().type === ',') {
+              report.error(a.line, 'falta un dato junto a la coma (,).');
+              argsOk = false;
+              continue;
+            }
+          } else {
+            report.error(a.line, 'separa los datos con una coma (,).');
+            argsOk = false;
+          }
+        }
+        var value = this.readArg();
+        if (value) {
+          args.push(value);
+        } else {
+          var bad = this.peek();
+          if (bad.type === ')' || bad.type === ';' || bad.type === '}' || bad.type === '{' || bad.type === 'eof') { continue; }
+          report.error(bad.line, 'no entiendo «' + bad.value + '» dentro de los paréntesis.');
+          argsOk = false;
+          this.next();
+        }
+      }
+
+      if (closed) {
+        if (this.peek().type === ';') {
+          this.next();
+        } else {
+          report.error(closeLine, 'parece que olvidaste el punto y coma (;).');
+        }
+      } else {
+        this.skipStatement(line);
+      }
+      if (!argsOk) { return; }
+
+      var action = validateInstruction(name, args, line, report);
+      if (action) {
+        action.fn = fnName;
+        actions.push(action);
+      }
+    };
+
+    /* ---------- Validación de cada instrucción ---------- */
+    function validatePin(arg, line, report) {
+      if (arg.kind === 'number' && arg.integer && arg.value >= LIMITS.minPin && arg.value <= LIMITS.maxPin) {
+        return arg.value;
+      }
+      var dMatch = arg.kind === 'ident' ? /^[Dd](\d+)$/.exec(arg.raw) : null;
+      if (dMatch) {
+        report.error(line, 'escribe solo el número del pin: ' + Number(dMatch[1]) + ' en lugar de ' + arg.raw + '.');
+      } else {
+        report.error(line, 'utiliza un pin digital entre 2 y 13.');
+      }
+      return null;
+    }
+
+    function validateInstruction(name, args, line, report) {
+      var def = INSTRUCTIONS[name];
+      if (!def) {
+        var fixed = BY_LOWERCASE[name.toLowerCase()];
+        if (fixed && INSTRUCTIONS[fixed]) {
+          report.error(line, 'revisa mayúsculas y minúsculas: se escribe ' + fixed + '.');
+        } else {
+          report.error(line, 'esa instrucción (' + name + ') todavía no está disponible en nuestro simulador.');
+        }
+        return null;
+      }
+      if (args.length !== def.args) {
+        report.error(line, name + ' necesita ' + (def.args === 1 ? '1 dato' : def.args + ' datos') + '. Ejemplo: ' + def.usage);
+        return null;
+      }
+
+      if (name === 'delay') {
+        var ms = args[0];
+        if (ms.kind !== 'number' || !ms.integer || ms.value < 0 || ms.value > LIMITS.maxDelay) {
+          report.error(line, 'en delay() escribe un número entero de milisegundos entre 0 y 60000.');
+          return null;
+        }
+        return { type: 'delay', ms: ms.value, line: line };
+      }
+
+      var pin = validatePin(args[0], line, report);
+      var second = args[1];
+
+      if (name === 'pinMode') {
+        var modeOk = second.kind === 'ident' && second.raw === 'OUTPUT';
+        if (!modeOk) {
+          if (second.kind === 'ident' && second.raw.toUpperCase() === 'OUTPUT') {
+            report.error(line, 'escribe OUTPUT con mayúsculas.');
+          } else if (second.kind === 'ident' && /^INPUT/i.test(second.raw)) {
+            report.error(line, 'en este simulador los pines se usan como salida: escribe OUTPUT.');
+          } else {
+            report.error(line, 'para configurar el pin como salida escribe OUTPUT.');
+          }
+        }
+        return pin !== null && modeOk ? { type: 'pinMode', pin: pin, mode: 'OUTPUT', line: line } : null;
+      }
+
+      // digitalWrite
+      var value = second.kind === 'ident' && (second.raw === 'HIGH' || second.raw === 'LOW') ? second.raw : null;
+      if (!value) {
+        if (second.kind === 'number' && (second.raw === '1' || second.raw === '0')) {
+          report.error(line, 'usa HIGH para encender o LOW para apagar, en lugar de 1 o 0.');
+        } else if (second.kind === 'ident' && looksLike(second.raw, 'HIGH', 2)) {
+          report.error(line, 'para encender el LED debes utilizar HIGH.');
+        } else if (second.kind === 'ident' && looksLike(second.raw, 'LOW', 1)) {
+          report.error(line, 'para apagar el LED debes utilizar LOW.');
+        } else {
+          report.error(line, 'digitalWrite usa HIGH para encender o LOW para apagar.');
+        }
+      }
+      return pin !== null && value ? { type: 'digitalWrite', pin: pin, value: value, line: line } : null;
+    }
+
+    /* ---------- Revisión del programa completo ---------- */
+    function checkProgram(functions, report) {
+      if (!functions.setup) { report.error(null, 'Falta la función setup(). Escríbela así: void setup() { }'); }
+      if (!functions.loop) { report.error(null, 'Falta la función loop(). Escríbela así: void loop() { }'); }
+      var setupActions = functions.setup ? functions.setup.actions : [];
+      var loopActions = functions.loop ? functions.loop.actions : [];
+
+      var configured = {};
+      var written = {};
+      var reported = {};
+      setupActions.concat(loopActions).forEach(function (action) {
+        if (action.type === 'pinMode') {
+          if (configured[action.pin]) {
+            report.warning(action.line, 'el pin ' + action.pin + ' ya estaba configurado como salida.');
+          }
+          if (action.fn === 'loop') {
+            report.warning(action.line, 'pinMode() suele escribirse dentro de setup().');
+          }
+          configured[action.pin] = action.line;
+        } else if (action.type === 'digitalWrite') {
+          written[action.pin] = true;
+          if (!configured[action.pin] && !reported[action.pin]) {
+            reported[action.pin] = true;
+            report.error(action.line, 'antes de controlar el pin ' + action.pin + ', configúralo como salida con pinMode(' + action.pin + ', OUTPUT).');
+          }
+        }
+      });
+      Object.keys(configured).forEach(function (pin) {
+        if (!written[pin]) {
+          report.warning(configured[pin], 'configuraste el pin ' + pin + ', pero ninguna instrucción digitalWrite lo usa.');
+        }
+      });
+      if (functions.loop) {
+        if (!loopActions.length) {
+          report.warning(functions.loop.line, 'loop() está vacía: no hay instrucciones para repetir.');
+        } else {
+          var writes = loopActions.some(function (a) { return a.type === 'digitalWrite'; });
+          var waits = loopActions.some(function (a) { return a.type === 'delay' && a.ms > 0; });
+          if (writes && !waits) {
+            report.warning(functions.loop.line, 'loop() no tiene delay(): los cambios serían tan rápidos que no podrías verlos.');
+          }
+        }
+      }
+      return { setupActions: setupActions, loopActions: loopActions };
+    }
+
+    function strip(action) {
+      var copy = { type: action.type, line: action.line };
+      if (action.type === 'pinMode') { copy.pin = action.pin; copy.mode = action.mode; }
+      if (action.type === 'digitalWrite') { copy.pin = action.pin; copy.value = action.value; }
+      if (action.type === 'delay') { copy.ms = action.ms; }
+      return copy;
+    }
+
+    function byLine(a, b) {
+      var la = a.line === null ? Infinity : a.line;
+      var lb = b.line === null ? Infinity : b.line;
+      return la - lb;
+    }
+
+    function parse(code) {
+      var errors = [];
+      var warnings = [];
+      var seen = {};
+      function add(list, kind, line, text) {
+        var message = line === null ? text : 'Línea ' + line + ': ' + text;
+        if (seen[kind + message]) { return; }
+        seen[kind + message] = true;
+        list.push({ line: line, message: message });
+      }
+      var report = {
+        error: function (line, text) { add(errors, 'e', line, text); },
+        warning: function (line, text) { add(warnings, 'w', line, text); }
+      };
+
+      code = typeof code === 'string' ? code : '';
+      var lineCount = code.split('\n').length;
+      var empty = { success: false, setupActions: [], loopActions: [], errors: errors, warnings: warnings, pins: [], instructionCount: 0 };
+      if (code.length > LIMITS.chars || lineCount > LIMITS.lines) {
+        report.error(null, 'Tu programa es muy largo. El máximo es ' + LIMITS.chars + ' caracteres y ' + LIMITS.lines + ' líneas.');
+        return empty;
+      }
+      if (!code.trim()) {
+        report.error(null, 'El editor está vacío. Escribe un programa o carga un ejemplo.');
+        return empty;
+      }
+
+      var tokens = tokenize(code, report);
+      var parser = new Parser(tokens, report);
+      parser.parseProgram();
+      var program = checkProgram(parser.functions, report);
+
+      // Si una línea ya avisa de una estructura no admitida (int x = 8;), no repetimos el aviso del símbolo.
+      var unsupportedLines = {};
+      errors.forEach(function (e) { if (e.line && /todavía no está disponible/.test(e.message)) { unsupportedLines[e.line] = true; } });
+      errors = errors.filter(function (e) { return !(unsupportedLines[e.line] && /el símbolo «/.test(e.message)); });
+
+      errors.sort(byLine);
+      warnings.sort(byLine);
+      var setupActions = program.setupActions.map(strip);
+      var loopActions = program.loopActions.map(strip);
+      var pins = [];
+      setupActions.concat(loopActions).forEach(function (a) {
+        if (a.pin && pins.indexOf(a.pin) === -1) { pins.push(a.pin); }
+      });
+      pins.sort(function (a, b) { return a - b; });
+
+      return {
+        success: errors.length === 0,
+        setupActions: setupActions,
+        loopActions: loopActions,
+        errors: errors,
+        warnings: warnings,
+        pins: pins,
+        instructionCount: setupActions.length + loopActions.length
+      };
+    }
+
+    return { parse: parse, LIMITS: LIMITS };
+  })();
+
+  /* ---------- Ejemplos (se adaptan a los LEDs conectados, sin cambiarlos) ---------- */
+  var EXAMPLES = [
+    { id: 'blink-l', name: 'Ejemplo 1: parpadeo del LED L' },
+    { id: 'blink-external', name: 'Ejemplo 2: parpadeo de un LED externo' },
+    { id: 'alternate', name: 'Ejemplo 3: alternar dos LEDs' }
   ];
 
-  function renderDemoCode() {
-    var target = document.getElementById('demo-code');
-    if (!target) { return; }
-    var fragment = document.createDocumentFragment();
-    DEMO_CODE.forEach(function (line) {
-      var span = document.createElement('span');
-      span.className = 'code-line';
-      span.textContent = line;
-      fragment.appendChild(span);
-    });
-    target.appendChild(fragment);
+  function pinNumber(pinId) {
+    return Number(String(pinId).replace('D', ''));
   }
 
+  function buildExample(id, leds) {
+    if (id === 'blink-l') {
+      return {
+        note: 'Este ejemplo usa el pin 13, que controla el LED L de la tarjeta. No necesitas conectar nada.',
+        code: [
+          '// Ejemplo 1: parpadeo del LED L (pin 13)',
+          'void setup() {',
+          '  pinMode(13, OUTPUT);     // el pin 13 será una salida',
+          '}',
+          '',
+          'void loop() {',
+          '  digitalWrite(13, HIGH);  // enciende el LED L',
+          '  delay(1000);             // espera 1 segundo',
+          '  digitalWrite(13, LOW);   // apaga el LED L',
+          '  delay(1000);             // espera 1 segundo',
+          '}'
+        ].join('\n')
+      };
+    }
+    if (id === 'blink-external') {
+      var led = leds[0];
+      var pin = led ? pinNumber(led.pin) : 8;
+      return {
+        note: led
+          ? 'Este ejemplo usa el pin ' + pin + ', donde conectaste el ' + Circuit.label(led) + ' ' + LED_COLORS[led.color].name.toLowerCase() + '.'
+          : 'Este ejemplo usa el pin 8. Para verlo funcionar en la simulación, conecta un LED al pin D8 en «Conecta tus LEDs».',
+        code: [
+          '// Ejemplo 2: parpadeo de un LED externo (pin ' + pin + ')',
+          'void setup() {',
+          '  pinMode(' + pin + ', OUTPUT);',
+          '}',
+          '',
+          'void loop() {',
+          '  digitalWrite(' + pin + ', HIGH);  // enciende el LED',
+          '  delay(500);              // espera medio segundo',
+          '  digitalWrite(' + pin + ', LOW);   // apaga el LED',
+          '  delay(500);',
+          '}'
+        ].join('\n')
+      };
+    }
+    // alternate: usa los dos primeros LEDs conectados; completa con 8 y 9 sin repetir.
+    var pins = leds.slice(0, 2).map(function (l) { return pinNumber(l.pin); });
+    [8, 9, 10].forEach(function (p) { if (pins.length < 2 && pins.indexOf(p) === -1) { pins.push(p); } });
+    var missing = pins.filter(function (p) { return !Circuit.ledOnPin('D' + p); });
+    var note;
+    if (!missing.length) {
+      note = 'Este ejemplo usa los pines ' + pins[0] + ' y ' + pins[1] + ', donde ya tienes LEDs conectados.';
+    } else if (missing.length === 2) {
+      note = 'Para verlo funcionar en la simulación, conecta LEDs en los pines D' + missing[0] + ' y D' + missing[1] + '.';
+    } else {
+      note = 'Para verlo funcionar en la simulación, conecta otro LED en el pin D' + missing[0] + '.';
+    }
+    return {
+      note: note,
+      code: [
+        '// Ejemplo 3: alternar dos LEDs (pines ' + pins[0] + ' y ' + pins[1] + ')',
+        'void setup() {',
+        '  pinMode(' + pins[0] + ', OUTPUT);',
+        '  pinMode(' + pins[1] + ', OUTPUT);',
+        '}',
+        '',
+        'void loop() {',
+        '  digitalWrite(' + pins[0] + ', HIGH);  // enciende el primero',
+        '  digitalWrite(' + pins[1] + ', LOW);   // apaga el segundo',
+        '  delay(500);',
+        '  digitalWrite(' + pins[0] + ', LOW);   // apaga el primero',
+        '  digitalWrite(' + pins[1] + ', HIGH);  // enciende el segundo',
+        '  delay(500);',
+        '}'
+      ].join('\n')
+    };
+  }
+
+  /* =========================================================
+     Program: estado del programa, verificación y panel de análisis.
+     A5 debe usar Program.getAnalysis(): devuelve el último análisis
+     correcto y vigente, o null si hay errores o está desactualizado.
+     ========================================================= */
+  var Program = {
+    els: {},
+
+    init: function () {
+      var self = this;
+      ['code-input', 'editor-gutter', 'editor-meta', 'example-select', 'load-example', 'verify-code', 'clear-code',
+        'editor-confirm', 'editor-confirm-text', 'editor-confirm-yes', 'editor-confirm-no', 'analysis-status', 'analysis-body']
+        .forEach(function (id) { self.els[id] = document.getElementById(id); });
+      var input = this.els['code-input'];
+      if (!input) { return; }
+
+      EXAMPLES.forEach(function (example) {
+        var option = document.createElement('option');
+        option.value = example.id;
+        option.textContent = example.name;
+        self.els['example-select'].appendChild(option);
+      });
+
+      if (!state.program.code) { state.program.code = buildExample('blink-l', []).code; }
+      input.value = state.program.code;
+
+      input.addEventListener('input', function () { self.onEdit(); });
+      input.addEventListener('scroll', function () { self.els['editor-gutter'].scrollTop = input.scrollTop; });
+      this.els['verify-code'].addEventListener('click', function () { self.verify(); });
+      this.els['load-example'].addEventListener('click', function () { self.requestExample(); });
+      this.els['clear-code'].addEventListener('click', function () { self.requestClear(); });
+      this.els['editor-confirm-no'].addEventListener('click', function () { self.closeConfirm(true); });
+      this.els['editor-confirm-yes'].addEventListener('click', function () {
+        var action = self.pendingAction;
+        self.closeConfirm(false);
+        if (action) { action(); }
+      });
+      this.els['analysis-body'].addEventListener('click', function (event) {
+        var button = event.target.closest('[data-goto-line]');
+        if (button) { self.goToLine(Number(button.getAttribute('data-goto-line'))); }
+      });
+
+      // Cambiar las conexiones no toca el código, pero el análisis anterior deja de ser vigente.
+      Circuit.onChange(function () {
+        if (state.program.analysis && !state.program.stale) {
+          state.program.stale = 'connections';
+          self.renderAnalysis();
+        }
+      });
+
+      this.renderGutter();
+      this.renderAnalysis();
+    },
+
+    getAnalysis: function () {
+      var p = state.program;
+      return p.analysis && p.analysis.success && !p.stale ? p.analysis : null;
+    },
+
+    setCode: function (code) {
+      this.els['code-input'].value = code;
+      this.onEdit();
+    },
+
+    onEdit: function () {
+      var p = state.program;
+      p.code = this.els['code-input'].value;
+      if (p.analysis) {
+        if (p.code === p.analyzedCode) {
+          if (p.stale === 'code') { p.stale = false; }
+        } else {
+          p.stale = 'code';
+        }
+      }
+      this.renderGutter();
+      this.renderAnalysis();
+    },
+
+    verify: function () {
+      var p = state.program;
+      var result = ArduinoParser.parse(p.code);
+      this.addLedWarnings(result);
+      p.analysis = result;
+      p.analyzedCode = p.code;
+      p.stale = false;
+      this.renderGutter();
+      this.renderAnalysis();
+    },
+
+    /* Advertencias que dependen de los LEDs conectados en A3 (no invalidan el programa). */
+    addLedWarnings: function (result) {
+      result.pinInfo = result.pins.map(function (pin) {
+        var led = Circuit.ledOnPin('D' + pin);
+        var info = { pin: pin, led: led, builtin: pin === 13 };
+        if (!led && pin !== 13) {
+          result.warnings.push({
+            line: null,
+            message: 'El pin ' + pin + ' no tiene un LED conectado. Conéctalo en «Conecta tus LEDs» para verlo funcionar en la simulación.'
+          });
+        }
+        return info;
+      });
+    },
+
+    requestExample: function () {
+      var self = this;
+      var id = this.els['example-select'].value;
+      var example = buildExample(id, Circuit.getLeds());
+      var apply = function () {
+        self.setCode(example.code);
+        self.exampleNote = example.note;
+        self.exampleCode = example.code;
+        self.renderAnalysis();
+        self.els['code-input'].focus();
+      };
+      var current = state.program.code.trim();
+      var isExample = EXAMPLES.some(function (e) { return buildExample(e.id, Circuit.getLeds()).code.trim() === current; });
+      if (!current || isExample) {
+        apply();
+      } else {
+        this.openConfirm('El ejemplo reemplazará tu código actual. ¿Quieres continuar?', 'Sí, cargar ejemplo', 'No, conservar mi código', apply);
+      }
+    },
+
+    requestClear: function () {
+      var self = this;
+      if (!state.program.code) { return; }
+      this.openConfirm('¿Seguro que quieres borrar todo tu programa?', 'Sí, borrar', 'No, conservarlo', function () {
+        self.setCode('');
+        self.exampleNote = '';
+        self.renderAnalysis();
+        self.els['code-input'].focus();
+      });
+    },
+
+    openConfirm: function (text, yes, no, action) {
+      this.pendingAction = action;
+      this.els['editor-confirm-text'].textContent = text;
+      this.els['editor-confirm-yes'].textContent = yes;
+      this.els['editor-confirm-no'].textContent = no;
+      this.els['editor-confirm'].hidden = false;
+      this.els['editor-confirm-no'].focus();
+    },
+
+    closeConfirm: function (returnFocus) {
+      this.pendingAction = null;
+      this.els['editor-confirm'].hidden = true;
+      if (returnFocus) { this.els['code-input'].focus(); }
+    },
+
+    goToLine: function (line) {
+      var input = this.els['code-input'];
+      var lines = input.value.split('\n');
+      var start = 0;
+      for (var i = 0; i < line - 1 && i < lines.length; i++) { start += lines[i].length + 1; }
+      input.focus();
+      input.setSelectionRange(start, start + (lines[line - 1] || '').length);
+      var lineHeight = parseFloat(window.getComputedStyle(input).lineHeight) || 24;
+      input.scrollTop = Math.max(0, (line - 3) * lineHeight);
+    },
+
+    renderGutter: function () {
+      var gutter = this.els['editor-gutter'];
+      var p = state.program;
+      var count = Math.min(p.code.split('\n').length, ArduinoParser.LIMITS.lines + 50);
+      var errorLines = {};
+      if (p.analysis && !p.stale) {
+        p.analysis.errors.forEach(function (e) { if (e.line) { errorLines[e.line] = true; } });
+      }
+      clearEl(gutter);
+      for (var i = 1; i <= count; i++) {
+        var span = document.createElement('span');
+        span.className = 'editor__line' + (errorLines[i] ? ' has-error' : '');
+        span.textContent = String(i);
+        gutter.appendChild(span);
+      }
+      gutter.scrollTop = this.els['code-input'].scrollTop;
+
+      var lines = p.code.split('\n').length;
+      var limits = ArduinoParser.LIMITS;
+      var meta = this.els['editor-meta'];
+      meta.textContent = 'Líneas: ' + lines + ' de ' + limits.lines + '. Caracteres: ' + p.code.length + ' de ' + limits.chars + '.';
+      meta.classList.toggle('is-over', lines > limits.lines || p.code.length > limits.chars);
+    },
+
+    /* Resumen en palabras derivado de las acciones reconocidas. */
+    describe: function (result) {
+      function ledName(pin) {
+        var led = Circuit.ledOnPin('D' + pin);
+        if (led) { return 'el ' + Circuit.label(led) + ' ' + LED_COLORS[led.color].name.toLowerCase() + ' (pin ' + pin + ')'; }
+        if (pin === 13) { return 'el LED L (pin 13)'; }
+        return null;
+      }
+      function pinsText(pins) {
+        if (pins.length === 1) { return 'el pin ' + pins[0]; }
+        return 'los pines ' + pins.slice(0, -1).join(', ') + ' y ' + pins[pins.length - 1];
+      }
+      function waitText(ms) {
+        if (ms === 0) { return 'no espera (delay de 0)'; }
+        if (ms % 1000 === 0) { return 'espera ' + (ms / 1000) + (ms === 1000 ? ' segundo' : ' segundos'); }
+        if (ms === 500) { return 'espera medio segundo'; }
+        return 'espera ' + ms + ' milisegundos';
+      }
+      function actionText(a) {
+        if (a.type === 'delay') { return waitText(a.ms); }
+        if (a.type === 'pinMode') { return 'configura el pin ' + a.pin + ' como salida'; }
+        var name = ledName(a.pin);
+        if (a.value === 'HIGH') { return name ? 'enciende ' + name : 'pone el pin ' + a.pin + ' en HIGH'; }
+        return name ? 'apaga ' + name : 'pone el pin ' + a.pin + ' en LOW';
+      }
+      function join(list) {
+        if (list.length === 1) { return list[0]; }
+        return list.slice(0, -1).join(', ') + ' y ' + list[list.length - 1];
+      }
+
+      var parts = [];
+      var setupPins = result.setupActions.filter(function (a) { return a.type === 'pinMode'; }).map(function (a) { return a.pin; });
+      var otherSetup = result.setupActions.filter(function (a) { return a.type !== 'pinMode'; });
+      if (setupPins.length) {
+        parts.push('Al comenzar, tu programa configura ' + pinsText(setupPins) + ' como ' + (setupPins.length === 1 ? 'salida' : 'salidas') +
+          (otherSetup.length ? ' y luego ' + join(otherSetup.map(actionText)) : '') + '.');
+      } else if (otherSetup.length) {
+        parts.push('Al comenzar, tu programa ' + join(otherSetup.map(actionText)) + '.');
+      } else {
+        parts.push('setup() no tiene instrucciones.');
+      }
+      if (result.loopActions.length) {
+        var shown = result.loopActions.slice(0, 8).map(actionText);
+        var rest = result.loopActions.length - shown.length;
+        parts.push('Después ' + join(shown) + (rest > 0 ? ', y ' + rest + ' instrucciones más' : '') + ', y repite esas instrucciones una y otra vez.');
+      }
+      return parts.join(' ');
+    },
+
+    renderAnalysis: function () {
+      var p = state.program;
+      var status = this.els['analysis-status'];
+      var body = this.els['analysis-body'];
+      clearEl(body);
+      var self = this;
+
+      function section(title, items, kind) {
+        var h = document.createElement('h3');
+        h.className = 'analysis__title';
+        h.textContent = title;
+        body.appendChild(h);
+        var list = document.createElement('ul');
+        list.className = 'analysis__list analysis__list--' + kind;
+        items.forEach(function (item) {
+          var li = document.createElement('li');
+          var text = document.createElement('span');
+          text.textContent = item.message;
+          li.appendChild(text);
+          if (item.line && kind === 'error') {
+            var go = document.createElement('button');
+            go.type = 'button';
+            go.className = 'analysis__goto';
+            go.setAttribute('data-goto-line', item.line);
+            go.textContent = 'Ir a la línea ' + item.line;
+            li.appendChild(go);
+          }
+          list.appendChild(li);
+        });
+        body.appendChild(list);
+      }
+      function paragraph(text, className) {
+        var el = document.createElement('p');
+        el.className = className;
+        el.textContent = text;
+        body.appendChild(el);
+      }
+
+      if (this.exampleNote && p.code === this.exampleCode) { paragraph(this.exampleNote, 'analysis__note'); }
+
+      if (!p.analysis) {
+        status.className = 'analysis__status';
+        status.textContent = 'Escribe tu programa y presiona «Verificar código».';
+        return;
+      }
+      if (p.stale) {
+        status.className = 'analysis__status analysis__status--stale';
+        status.textContent = p.stale === 'connections'
+          ? 'Cambiaste las conexiones de los LEDs. Presiona «Verificar código» otra vez.'
+          : 'Cambiaste el código después de verificarlo. Presiona «Verificar código» otra vez.';
+        return;
+      }
+
+      var a = p.analysis;
+      if (a.success) {
+        status.className = 'analysis__status analysis__status--ok';
+        status.textContent = '¡Muy bien! Tu programa está correctamente escrito y listo para simularse.';
+      } else {
+        status.className = 'analysis__status analysis__status--error';
+        status.textContent = a.errors.length === 1
+          ? 'Encontramos 1 error en tu programa. Revísalo y verifica otra vez.'
+          : 'Encontramos ' + a.errors.length + ' errores en tu programa. Revísalos y verifica otra vez.';
+      }
+
+      if (a.errors.length) {
+        var shown = a.errors.slice(0, 6);
+        if (a.errors.length > shown.length) {
+          shown = shown.concat([{ line: null, message: 'Y ' + (a.errors.length - shown.length) + ' errores más. Corrige los primeros y verifica otra vez.' }]);
+        }
+        section('Errores', shown, 'error');
+      }
+      if (a.warnings.length) { section('Advertencias', a.warnings, 'warning'); }
+
+      if (a.success) {
+        var facts = document.createElement('dl');
+        facts.className = 'analysis__facts';
+        var setupCount = a.setupActions.length;
+        var loopCount = a.loopActions.length;
+        [
+          ['Instrucciones reconocidas', a.instructionCount + ' (' + setupCount + ' en setup y ' + loopCount + ' en loop)'],
+          ['Pines utilizados', a.pinInfo.length ? a.pinInfo.map(function (info) {
+            if (info.led) { return 'D' + info.pin + ': ' + Circuit.label(info.led) + ' ' + LED_COLORS[info.led.color].name.toLowerCase(); }
+            if (info.builtin) { return 'D13: LED L de la tarjeta'; }
+            return 'D' + info.pin + ': sin LED conectado';
+          }).join('; ') : 'ninguno']
+        ].forEach(function (row) {
+          var dt = document.createElement('dt');
+          dt.textContent = row[0];
+          var dd = document.createElement('dd');
+          dd.textContent = row[1];
+          facts.appendChild(dt);
+          facts.appendChild(dd);
+        });
+        body.appendChild(facts);
+
+        var h = document.createElement('h3');
+        h.className = 'analysis__title';
+        h.textContent = '¿Qué hará tu programa?';
+        body.appendChild(h);
+        paragraph(self.describe(a), 'analysis__summary');
+        paragraph('Esto es solo una revisión: el programa todavía no se ejecuta y los LEDs siguen apagados.', 'analysis__hint');
+      }
+    }
+  };
+
+  /* ---------- Preparación de vistas (contenido estático) ---------- */
   function renderPinOptions() {
     var select = document.getElementById('pin-select');
     if (!select) { return; }
@@ -1431,13 +2387,13 @@
 
   /* ---------- Inicio ---------- */
   function init() {
-    renderDemoCode();
     renderPinOptions();
     Explorer.init();
     BoardZoom.init();
     ConnectView.init();
     CircuitView.init();
     ProgramLedsView.init();
+    Program.init();
     Router.init();
   }
 

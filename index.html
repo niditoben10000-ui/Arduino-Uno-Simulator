@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Aplicación educativa para conocer el Arduino Uno, conectar LEDs y programarlos.">
   <title>Arduino Uno Simulator</title>
-  <link rel="stylesheet" href="style.css">
+  <!-- La versión (?v=) obliga al navegador a descargar los archivos nuevos en cada entrega.
+       Actualízala cuando cambien style.css o script.js. -->
+  <link rel="stylesheet" href="style.css?v=a4-1">
 </head>
 <body>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
@@ -463,18 +465,40 @@
         <div class="panel panel--editor" aria-labelledby="editor-title">
           <div class="panel__head">
             <h2 id="editor-title" class="panel__title">Editor de código</h2>
-            <span class="badge badge--demo">Demostración: no se ejecuta</span>
+            <span class="badge badge--demo">Arduino simplificado</span>
           </div>
-          <div class="code-view" id="code-editor" data-slot="code-editor">
-            <pre class="code-view__pre" aria-label="Código de ejemplo"><code id="demo-code"></code></pre>
+          <p class="editor-help" id="editor-help">Usamos un lenguaje simplificado basado en Arduino: <code>setup()</code>, <code>loop()</code>, <code>pinMode()</code>, <code>digitalWrite()</code> y <code>delay()</code>. Pines del 2 al 13.</p>
+          <div class="editor" id="code-editor" data-slot="code-editor">
+            <div class="editor__gutter" id="editor-gutter" aria-hidden="true"></div>
+            <label class="visually-hidden" for="code-input">Código de tu programa</label>
+            <textarea class="editor__input" id="code-input" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off" aria-describedby="editor-help editor-meta"></textarea>
           </div>
-          <div class="toolbar" role="group" aria-label="Controles del programa">
-            <button type="button" class="btn btn--ghost" disabled>Cargar ejemplo</button>
+          <p class="editor-meta" id="editor-meta"></p>
+
+          <div class="toolbar toolbar--editor" role="group" aria-label="Herramientas del editor">
+            <div class="example-picker">
+              <label class="example-picker__label" for="example-select">Ejemplo</label>
+              <select class="select example-picker__select" id="example-select"></select>
+              <button type="button" class="btn btn--ghost" id="load-example">Cargar ejemplo</button>
+            </div>
+            <button type="button" class="btn btn--primary" id="verify-code">Verificar código</button>
+            <button type="button" class="btn btn--ghost" id="clear-code">Limpiar código</button>
+          </div>
+
+          <div class="confirm" id="editor-confirm" role="group" aria-labelledby="editor-confirm-text" hidden>
+            <p class="confirm__text" id="editor-confirm-text"></p>
+            <div class="confirm__actions">
+              <button type="button" class="btn btn--stop" id="editor-confirm-yes"></button>
+              <button type="button" class="btn btn--ghost" id="editor-confirm-no"></button>
+            </div>
+          </div>
+
+          <div class="toolbar toolbar--sim" role="group" aria-label="Controles de la simulación" aria-describedby="sim-soon">
             <button type="button" class="btn btn--run" disabled>Ejecutar</button>
             <button type="button" class="btn btn--stop" disabled>Detener</button>
             <button type="button" class="btn btn--ghost" disabled>Reiniciar</button>
           </div>
-          <p class="soon-note"><span class="badge">Próximamente</span> Los botones se activarán cuando el simulador esté listo.</p>
+          <p class="soon-note" id="sim-soon"><span class="badge">Próximamente</span> Ejecutar, Detener y Reiniciar se activarán cuando agreguemos la simulación. Por ahora puedes escribir y verificar tu programa.</p>
         </div>
 
         <div class="side-stack">
@@ -488,9 +512,10 @@
 
           <div class="panel panel--console" aria-labelledby="messages-title">
             <h2 id="messages-title" class="panel__title">Mensajes</h2>
-            <ol class="console" id="run-messages" data-slot="run-messages" aria-live="polite">
-              <li class="console__line">El programa no se ha ejecutado.</li>
-            </ol>
+            <div class="console analysis" id="run-messages" data-slot="run-messages">
+              <p class="analysis__status" id="analysis-status" role="status" aria-live="polite"></p>
+              <div class="analysis__body" id="analysis-body"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -507,6 +532,6 @@
     <p>Arduino Uno Simulator: un proyecto educativo para quinto grado.</p>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=a4-1"></script>
 </body>
 </html>
