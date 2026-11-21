@@ -393,23 +393,217 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
 .path-card__text { color: var(--c-text-muted); }
 
 /* 8. Vista Conoce ---------------------------------------- */
-.board-preview { width: min(100%, 560px); height: auto; }
-.board-preview__label { fill: var(--c-primary-dark); font: 700 26px var(--font-sans); }
-.board-preview__hint { fill: var(--c-text-muted); font: 500 16px var(--font-sans); }
-
 .panel--stage .stage { min-height: 320px; }
+.panel--stage .stage--board { min-height: 0; padding: var(--space-3); }
 
+/* Tarjeta SVG */
+.board { width: 100%; height: auto; overflow: visible; }
+.board__pcb { fill: #00818A; stroke: #00656C; stroke-width: 4; }
+.board__hole circle { fill: var(--c-bg); stroke: #C8D2DE; stroke-width: 3; }
+.board__silk text { fill: #FFFFFF; opacity: 0.85; font: 700 13px var(--font-sans); }
+.board__silk .board__silk-led { font-size: 12px; }
+.board__silk .board__logo { font-size: 58px; font-weight: 800; letter-spacing: 0.06em; opacity: 0.9; }
+.board__usb rect { fill: #C8D2DE; stroke: #8E9BAD; stroke-width: 2; }
+.board__usb .board__usb-inner { fill: #9AA6B8; }
+.board__button-body { fill: #2C3546; }
+.board__button-cap { fill: #C8D2DE; }
+.board__leg, .board__metal, .board__metal rect { fill: #B7C1CE; }
+.board__fuse rect { fill: #253247; }
+.board__fuse .board__fuse-end { fill: #A27C55; }
+.board__jack rect { fill: #1E2633; }
+.board__jack .board__jack-front { fill: #3A4558; }
+.board__jack-hole { fill: #3A4558; }
+.board__diode > rect:not(.board__metal) { fill: #253247; }
+.board__ic > rect:not(.board__metal), .board__ic path { fill: #253247; }
+.board__notch { fill: #00818A !important; }
+.board__dot { fill: #8E9BAD; }
+.board__chip-label { fill: #DCE3EC; font: 700 15px var(--font-sans); letter-spacing: 0.08em; text-anchor: middle; }
+.board__cap circle { fill: #DCE3EC; stroke: #A9B4C3; stroke-width: 3; }
+.board__cap-base { fill: #253247; }
+.board__crystal { fill: #DCE3EC; stroke: #A9B4C3; stroke-width: 3; }
+.board__resonator { fill: #6F8FB5; stroke: #4D6B8F; stroke-width: 2; }
+.board__socket { fill: #3A4558; }
+.board__smd rect { fill: #3A4558; stroke: #B7C1CE; stroke-width: 1; }
+.board__pad circle, .board__pad rect { fill: #C9A86A; }
+.board__chipcap > rect:first-child { fill: #A88E6A; }
+.board__dip rect { fill: #B7C1CE; }
+.board__header rect { fill: #1E2633; }
+.board__pin rect, #header-pins rect { fill: #8E9BAD; }
+.board__pin-label { fill: #FFFFFF; font: 600 9px var(--font-sans); text-anchor: middle; opacity: 0.85; }
+.board__pin-label--sm { font-size: 7.5px; }
+.board__led { stroke: rgba(0, 0, 0, 0.25); stroke-width: 1.5; }
+.board__led--l, .board__led--tx, .board__led--rx { fill: #F2E3B8; }
+.board__led--on { fill: #C5E8D2; }
+
+/* Capas interactivas */
+.board__dim {
+  fill: rgba(22, 31, 46, 0.42);
+  fill-rule: evenodd;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease);
+}
+.board__hl { fill: none; pointer-events: none; }
+.board__hl--outer { stroke: var(--c-accent); stroke-width: 6; }
+.board__hl--inner { stroke: #FFFFFF; stroke-width: 2; stroke-dasharray: 8 6; }
+.board__hl--outer { animation: hl-pulse 1.6s ease-in-out infinite; }
+
+@keyframes hl-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.55; }
+}
+
+.board__marker { cursor: pointer; }
+.board__marker-hit { fill: transparent; }
+.board__marker-dot { fill: #FFFFFF; stroke: var(--c-text); stroke-width: 2; }
+.board__marker text { fill: var(--c-text); font: 800 13px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.board__marker:hover .board__marker-dot { stroke-width: 3.5; }
+.board__marker.is-selected .board__marker-dot { fill: var(--c-accent); stroke-width: 3; }
+.board[data-show-markers="false"] .board__marker:not(.is-selected) { display: none; }
+
+/* Etiquetas táctiles de subpartes (ICSP, LEDs, jack y diodo) */
+.board__pill { cursor: pointer; }
+.board__pill rect { fill: var(--c-text); stroke: #FFFFFF; stroke-width: 2; }
+.board__pill text { fill: #FFFFFF; font: 800 12px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.board__pill:hover rect { stroke: var(--c-accent); stroke-width: 3; }
+.board__pill.is-selected rect { fill: var(--c-accent); stroke: var(--c-text); stroke-width: 3; }
+.board__pill.is-selected text { fill: var(--c-text); }
+
+.zone { cursor: pointer; outline: none; }
+.zone__hit { fill: transparent; stroke: transparent; stroke-width: 3; }
+.zone:hover .zone__hit { fill: rgba(255, 255, 255, 0.18); stroke: rgba(255, 255, 255, 0.85); }
+.zone:focus-visible .zone__hit { stroke: var(--c-secondary); stroke-width: 5; fill: rgba(255, 255, 255, 0.18); }
+
+.stage-hint { margin-top: var(--space-3); color: var(--c-text-muted); font-size: var(--fs-sm); }
+
+/* Ampliar tarjeta (A2.2) */
+.stage-tools { display: flex; justify-content: flex-end; margin-bottom: var(--space-3); }
+.btn__icon {
+  width: 22px; height: 22px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.btn--zoom { color: var(--c-primary-dark); }
+.btn--zoom.is-active { background: var(--c-primary); border-color: var(--c-primary); color: #FFFFFF; }
+.btn--zoom.is-active:hover:not(:disabled) { background: var(--c-primary-dark); }
+.btn--zoom.is-active .btn__icon-plus { display: none; }
+
+.board-scroll {
+  width: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  border-radius: var(--radius-md);
+}
+.board-scroll.is-zoomed {
+  max-height: 65vh;
+  outline: 3px solid var(--c-primary);
+  outline-offset: 2px;
+  background: var(--c-bg);
+}
+.board-scroll.is-zoomed .board {
+  width: calc(100% * var(--board-zoom, 1.75));
+  max-width: none;
+}
+
+/* Panel de información */
 .info-card {
   padding: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--c-primary-soft);
   border-left: 6px solid var(--c-primary);
 }
-.info-card__name { font-weight: 700; font-size: var(--fs-md); margin-bottom: var(--space-2); }
+.info-card__group { color: var(--c-primary-dark); font-weight: 700; font-size: var(--fs-sm); }
+.info-card__name { font-weight: 800; font-size: var(--fs-lg); margin: var(--space-1) 0 var(--space-3); }
 .info-card__text { color: var(--c-text-muted); }
+.info-list { margin: 0; }
+.info-list dt { font-weight: 700; margin-top: var(--space-3); }
+.info-list dt:first-child { margin-top: 0; }
+.info-list dd { margin: var(--space-1) 0 0; }
+.info-list .info-list__kid {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+}
+.info-card__note {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--c-accent-soft);
+  color: #5E4100;
+  font-size: var(--fs-sm);
+}
+
+.parts { margin-top: var(--space-4); }
+.parts__title { font-size: var(--fs-base); margin-bottom: var(--space-2); }
+.parts__buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* Botón que muestra selección (lista y subpartes) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--c-primary); }
+.chip[aria-pressed="true"] {
+  border-color: var(--c-text);
+  background: var(--c-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--c-text);
+}
+.chip__check {
+  width: 20px; height: 20px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--c-border);
+  background: var(--c-surface);
+}
+.chip[aria-pressed="true"] .chip__check {
+  border-color: var(--c-text);
+  background: var(--c-text) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 10 3.5 3.5L15 7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
 
 .panel--controls { margin-top: var(--space-5); }
 .controls-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.counter {
+  min-width: 6.5em;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--c-bg);
+  text-align: center;
+  font-weight: 700;
+}
+.check { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; margin-left: auto; cursor: pointer; }
+.check input { width: 20px; height: 20px; accent-color: var(--c-primary); }
+
+.component-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.component-list .chip { width: 100%; height: 100%; }
+.chip__num {
+  display: grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--c-primary-soft);
+  color: var(--c-primary-dark);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+}
+.chip[aria-pressed="true"] .chip__num { background: var(--c-text); color: #FFFFFF; }
 
 /* 9. Vista Conecta --------------------------------------- */
 .stage--circuit { min-height: 280px; }
@@ -560,6 +754,10 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
   .panel { padding: var(--space-4); }
   .hero__title { font-size: 2.25rem; }
   .btn--lg { width: 100%; }
+  .check { margin-left: 0; }
+  .board__marker-hit { r: 22px; }
+  .panel--stage .stage--board { padding: 0; }
+  .controls-row .btn { flex: 1 1 auto; }
 }
 
 @media (max-width: 420px) {

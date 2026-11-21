@@ -137,22 +137,212 @@
       <div class="layout-split">
         <div class="panel panel--stage" aria-labelledby="conoce-stage-title">
           <h2 id="conoce-stage-title" class="visually-hidden">Tarjeta Arduino Uno R3</h2>
-          <div class="stage" id="board-explorer" data-slot="board-explorer">
-            <svg class="board-preview" viewBox="0 0 400 290" role="img" aria-labelledby="board-preview-title">
-              <title id="board-preview-title">Silueta preliminar de la tarjeta Arduino Uno. Las zonas interactivas aún no están disponibles.</title>
-              <rect x="10" y="10" width="380" height="270" rx="18" fill="#008C95" opacity=".14" stroke="#008C95" stroke-width="3" stroke-dasharray="10 8"/>
-              <text x="200" y="138" text-anchor="middle" class="board-preview__label">Arduino Uno R3</text>
-              <text x="200" y="166" text-anchor="middle" class="board-preview__hint">Vista preliminar</text>
-            </svg>
+          <div class="stage-tools" id="board-zoom-tools" hidden>
+            <button type="button" class="btn btn--ghost btn--zoom" id="board-zoom" aria-controls="board-scroll">
+              <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M7.5 10.5h6"/><path class="btn__icon-plus" d="M10.5 7.5v6"/></svg>
+              <span id="board-zoom-label">Ampliar tarjeta</span>
+            </button>
           </div>
-          <p class="soon-note"><span class="badge">Próximamente</span> Aquí podrás tocar cada parte de la tarjeta.</p>
+          <div class="stage stage--board" id="board-explorer" data-slot="board-explorer">
+            <div class="board-scroll" id="board-scroll">
+            <!-- Tarjeta Arduino Uno R3 (ATmega328P DIP), vista superior.
+                 Geometría tomada del diseño oficial EAGLE "UNO-TH_Rev3e.brd":
+                 X = x_mm × 9,52 ; Y = (53,34 − y_mm) × 9,52 (origen arriba a la izquierda).
+                 Los comentarios indican la referencia de cada pieza (U1, Y2, C5...). -->
+            <svg class="board" id="uno-board" viewBox="-72 -16 740 540" role="group" aria-labelledby="board-title" data-show-markers="true">
+              <title id="board-title">Tarjeta Arduino Uno R3. Usa las flechas para recorrer los componentes.</title>
+              <g class="board__art" aria-hidden="true">
+                <!-- Contorno de la placa (capa Dimension del .brd) -->
+                <path class="board__pcb" d="M9.5 0 H614.2 L628.7 14.5 V123.3 L652.9 147.4 V459.4 L628.7 483.6 V498.3 A9.5 9.5 0 0 1 619.2 507.8 H9.5 A9.5 9.5 0 0 1 0 498.3 V9.5 A9.5 9.5 0 0 1 9.5 0 Z"/>
+                <!-- Agujeros de montaje -->
+                <g class="board__hole"><circle cx="145.1" cy="24.2" r="15.2"/><circle cx="133" cy="483.6" r="15.2"/><circle cx="628.7" cy="169.3" r="15.2"/><circle cx="628.7" cy="435.3" r="15.2"/></g>
+
+                <!-- Serigrafía -->
+                <g class="board__silk">
+                  <text x="300" y="68">DIGITAL (PWM~)</text>
+                  <text x="320" y="450">POWER</text>
+                  <text x="505" y="450">ANALOG IN</text>
+                  <text class="board__silk-led" x="284" y="111">L</text>
+                  <text class="board__silk-led" x="284" y="164">TX</text>
+                  <text class="board__silk-led" x="284" y="186">RX</text>
+                  <text class="board__silk-led" x="538" y="164" text-anchor="end">ON</text>
+                  <text class="board__logo" x="380" y="220">UNO</text>
+                </g>
+
+                <!-- Componentes pequeños de contexto (no seleccionables) -->
+                <g class="board__smd">
+                  <rect x="107.2" y="219.9" width="15.2" height="7.6" rx="1"/><!-- C2 -->
+                  <rect x="258.4" y="80.8" width="15.2" height="7.6" rx="1"/><!-- C4 -->
+                  <rect x="258.4" y="204.1" width="15.2" height="7.6" rx="1"/><!-- C7 -->
+                  <rect x="71.2" y="241.3" width="12.4" height="27.6" rx="1"/><!-- T1 -->
+                  <rect x="171.5" y="353.9" width="7.6" height="15.2" rx="1"/><!-- C1 -->
+                  <rect x="113.3" y="129.2" width="15.2" height="7.6" rx="1"/><!-- Z1 -->
+                  <rect x="113.3" y="183.6" width="15.2" height="7.6" rx="1"/><!-- Z2 -->
+                  <rect x="63" y="72.6" width="19" height="11.9" rx="1"/><!-- L1 -->
+                  <rect x="385.3" y="287.6" width="15.2" height="7.6" rx="1"/><!-- R2 -->
+                  <rect x="258.4" y="117.8" width="15.2" height="30.5" rx="1"/><!-- RN2 -->
+                  <rect x="258.4" y="265.3" width="15.2" height="30.5" rx="1"/><!-- RN1 -->
+                  <rect x="427.6" y="286.4" width="15.2" height="7.6" rx="1"/><!-- C6 -->
+                  <rect x="113.3" y="105" width="15.2" height="7.6" rx="1"/><!-- C8 -->
+                  <rect x="548.5" y="171" width="15.2" height="30.5" rx="1"/><!-- RN4 -->
+                  <rect x="114.5" y="141.9" width="15.2" height="30.5" rx="1"/><!-- RN3 -->
+                  <rect x="239.2" y="353.9" width="7.6" height="15.2" rx="1"/><!-- C3 -->
+                  <rect x="173.7" y="222.3" width="15.2" height="7.6" rx="1"/><!-- R1 -->
+                  <rect x="144.7" y="222.3" width="15.2" height="7.6" rx="1"/><!-- C9 -->
+                  <rect x="204" y="222.3" width="15.2" height="7.6" rx="1"/><!-- C11 -->
+                  <rect x="559.2" y="225.1" width="13.3" height="33.3" rx="1"/><!-- D2 -->
+                  <rect x="117.9" y="51" width="13.3" height="33.3" rx="1"/><!-- D3 -->
+                  <rect x="362.9" y="424.5" width="19" height="11.9" rx="1"/><!-- L2 -->
+                  <rect x="414.3" y="403.6" width="15.2" height="7.6" rx="1"/><!-- C10 -->
+                </g>
+                <!-- JP2: 4 orificios sin conector -->
+                <g class="board__pad"><circle cx="174.1" cy="104" r="6"/><circle cx="198.3" cy="104" r="6"/><circle cx="174.1" cy="128.2" r="6"/><circle cx="198.3" cy="128.2" r="6"/></g>
+                <!-- Puente RESET-EN (solo almohadillas) -->
+                <g class="board__pad"><rect x="253.1" y="240.3" width="11.1" height="15.2" rx="1.5"/><rect x="267.7" y="240.3" width="11.1" height="15.2" rx="1.5"/></g>
+
+                <!-- X2: conector USB tipo B -->
+                <g class="board__usb">
+                  <rect x="-60" y="88" width="146" height="114" rx="4"/>
+                  <rect class="board__usb-inner" x="-52" y="108" width="74" height="74" rx="3"/>
+                </g>
+                <!-- RESET: pulsador TS42 -->
+                <g class="board__button">
+                  <g class="board__metal">
+                    <rect x="13" y="9.5" width="15" height="13" rx="1"/><rect x="93" y="9.5" width="15" height="13" rx="1"/>
+                    <rect x="13" y="31" width="15" height="13" rx="1"/>
+                    <rect x="13" y="52.5" width="15" height="13" rx="1"/><rect x="93" y="52.5" width="15" height="13" rx="1"/>
+                  </g>
+                  <rect class="board__button-body" x="33.4" y="18.5" width="54.2" height="38" rx="3"/>
+                  <circle class="board__button-cap" cx="60.5" cy="37.5" r="14.3"/>
+                </g>
+                <!-- F1: polifusible (1812) -->
+                <g class="board__fuse">
+                  <rect x="23.5" y="233.6" width="30.5" height="43" rx="2"/>
+                  <rect class="board__fuse-end" x="23.5" y="233.6" width="30.5" height="9" rx="2"/>
+                  <rect class="board__fuse-end" x="23.5" y="267.6" width="30.5" height="9" rx="2"/>
+                </g>
+                <!-- X1: jack DC -->
+                <g class="board__jack">
+                  <rect x="-17" y="391" width="133" height="98" rx="5"/>
+                  <rect class="board__jack-front" x="-17" y="395" width="14" height="90"/>
+                  <circle class="board__jack-hole" cx="50" cy="440" r="18"/>
+                </g>
+                <!-- D1: diodo M7 (SMB) -->
+                <g class="board__diode">
+                  <rect class="board__metal" x="176" y="474" width="59" height="14" rx="1"/>
+                  <rect x="185" y="464" width="41" height="34" rx="2"/>
+                </g>
+                <!-- U1: regulador 5 V (SOT-223) -->
+                <g class="board__ic">
+                  <rect class="board__metal" x="38" y="326" width="19" height="31" rx="1"/>
+                  <rect x="57" y="311" width="33" height="62" rx="2"/>
+                  <rect class="board__metal" x="90" y="316.8" width="22" height="7"/><rect class="board__metal" x="90" y="338.7" width="22" height="7"/><rect class="board__metal" x="90" y="360.6" width="22" height="7"/>
+                </g>
+                <!-- PC1, PC2: capacitores electrolíticos -->
+                <g class="board__cap">
+                  <rect class="board__cap-base" x="143.9" y="389.3" width="62.8" height="62.8" rx="6"/><circle cx="175.3" cy="420.7" r="29"/>
+                  <rect class="board__cap-base" x="211.6" y="389.3" width="62.8" height="62.8" rx="6"/><circle cx="243" cy="420.7" r="29"/>
+                </g>
+                <!-- U5: LMV358 (MSOP-8) -->
+                <g class="board__ic">
+                  <g class="board__metal">
+                    <rect x="157" y="303.4" width="10" height="3.5"/><rect x="157" y="309.6" width="10" height="3.5"/><rect x="157" y="315.8" width="10" height="3.5"/><rect x="157" y="322" width="10" height="3.5"/>
+                    <rect x="195.6" y="303.4" width="10" height="3.5"/><rect x="195.6" y="309.6" width="10" height="3.5"/><rect x="195.6" y="315.8" width="10" height="3.5"/><rect x="195.6" y="322" width="10" height="3.5"/>
+                  </g>
+                  <rect x="167" y="300" width="28.6" height="28.6" rx="2"/>
+                </g>
+                <!-- U2: regulador 3,3 V LP2985-33 (SOT-23-5) -->
+                <g class="board__ic">
+                  <g class="board__metal">
+                    <rect x="193" y="351.7" width="8.6" height="4"/><rect x="193" y="360.7" width="8.6" height="4"/><rect x="193" y="369.7" width="8.6" height="4"/>
+                    <rect x="216.8" y="351.7" width="8.6" height="4"/><rect x="216.8" y="369.7" width="8.6" height="4"/>
+                  </g>
+                  <rect x="201.6" y="349" width="15.2" height="27.6" rx="1.5"/>
+                </g>
+                <!-- U3: ATmega16U2 (QFN-32) -->
+                <g class="board__ic">
+                  <rect class="board__metal" x="163.2" y="151.1" width="53.3" height="53.3" rx="2"/>
+                  <rect x="166" y="153.9" width="47.6" height="47.6" rx="2"/>
+                  <circle class="board__dot" cx="173" cy="161" r="2.5"/>
+                </g>
+                <!-- Y1: cristal 16 MHz (HC-49 SMD) -->
+                <rect class="board__crystal" x="125.7" y="237" width="108.8" height="43.5" rx="21.7"/>
+                <!-- Y2: resonador cerámico 16 MHz (CSTCE16M0V53) -->
+                <rect class="board__resonator" x="379.6" y="263.2" width="26.7" height="15.2" rx="2"/>
+                <!-- C5: capacitor de auto-reset 100 nF (0603) -->
+                <g class="board__chipcap">
+                  <rect x="258.4" y="219.9" width="15.2" height="7.6" rx="1"/>
+                  <rect class="board__metal" x="258.4" y="219.9" width="4.8" height="7.6"/><rect class="board__metal" x="268.8" y="219.9" width="4.8" height="7.6"/>
+                </g>
+
+                <!-- ZU4: ATmega328P DIP-28 en zócalo -->
+                <rect class="board__socket" x="265" y="305" width="353" height="93" rx="4"/>
+                <g class="board__dip" id="dip-pins"></g>
+                <g class="board__ic">
+                  <rect x="274" y="323" width="335" height="57" rx="3"/>
+                  <path class="board__notch" d="M609 340 A12 12 0 0 0 609 364 Z"/>
+                  <text class="board__chip-label" x="441" y="357">ATMEGA328P</text>
+                </g>
+
+                <!-- ICSP1 (ATmega16U2) e ICSP (ATmega328P) -->
+                <g class="board__header">
+                  <rect x="137.8" y="43.5" width="72.5" height="48.4" rx="3"/>
+                  <rect x="593.6" y="205.5" width="48.4" height="72.5" rx="3"/>
+                </g>
+                <g class="board__pin" id="icsp-pins"></g>
+
+                <!-- Conectores IOH, IOL, POWER y AD -->
+                <g class="board__header">
+                  <rect x="166.8" y="12.1" width="241.8" height="24.2" rx="3"/>
+                  <rect x="423.2" y="12.1" width="193.4" height="24.2" rx="3"/>
+                  <rect x="253.9" y="471.5" width="193.4" height="24.2" rx="3"/>
+                  <rect x="471.5" y="471.5" width="145.1" height="24.2" rx="3"/>
+                </g>
+                <g id="header-pins"></g>
+
+                <!-- LEDs indicadores L, TX, RX y ON (apagados en A2) -->
+                <g class="board__leds">
+                  <rect class="board__led board__led--l" data-indicator="L" x="253" y="100.4" width="26" height="12" rx="3"/>
+                  <rect class="board__led board__led--tx" data-indicator="TX" x="253" y="153.6" width="26" height="12" rx="3"/>
+                  <rect class="board__led board__led--rx" data-indicator="RX" x="253" y="175.4" width="26" height="12" rx="3"/>
+                  <rect class="board__led board__led--on" data-indicator="ON" x="543.2" y="153.6" width="26" height="12" rx="3"/>
+                </g>
+              </g>
+
+              <!-- Capas generadas por script.js -->
+              <path class="board__dim" id="board-dim" d="" aria-hidden="true"/>
+              <g id="board-highlight" aria-hidden="true"></g>
+              <g id="board-zones" role="radiogroup" aria-label="Componentes de la tarjeta"></g>
+              <g id="board-markers" aria-hidden="true"></g>
+              <g id="board-pills" aria-hidden="true"></g>
+            </svg>
+            </div>
+          </div>
+          <p class="stage-hint" id="board-hint" aria-live="polite">Toca una parte de la tarjeta o su número. Con el teclado, usa Tab y las flechas.</p>
         </div>
 
-        <aside class="panel panel--info" aria-labelledby="info-title" aria-live="polite">
+        <aside class="panel panel--info" aria-labelledby="info-title">
           <h2 id="info-title" class="panel__title">Información</h2>
+          <p class="visually-hidden" id="info-status" role="status" aria-live="polite"></p>
           <div class="info-card" id="component-info" data-slot="component-info">
-            <p class="info-card__name">Ningún componente seleccionado</p>
-            <p class="info-card__text">Cuando elijas una parte de la tarjeta, aquí verás su nombre y para qué sirve.</p>
+            <p class="info-card__group" id="info-group">Ningún componente seleccionado</p>
+            <h3 class="info-card__name" id="info-name">¡Vamos a conocer Arduino!</h3>
+            <p class="info-card__text" id="info-empty">Elige una parte de la tarjeta o usa la lista de componentes.</p>
+            <div id="info-body" hidden>
+              <dl class="info-list">
+                <dt>¿Qué es?</dt>
+                <dd id="info-what"></dd>
+                <dt>¿Para qué sirve?</dt>
+                <dd id="info-purpose"></dd>
+                <dt>Explicación sencilla</dt>
+                <dd class="info-list__kid" id="info-kid"></dd>
+              </dl>
+              <p class="info-card__note" id="info-note" hidden></p>
+            </div>
+          </div>
+          <div class="parts" id="info-parts" hidden>
+            <h3 class="parts__title" id="parts-title">Conoce cada uno</h3>
+            <div class="parts__buttons" id="info-part-buttons" role="group" aria-labelledby="parts-title"></div>
           </div>
         </aside>
       </div>
@@ -160,11 +350,16 @@
       <div class="panel panel--controls" aria-labelledby="explore-controls-title">
         <h2 id="explore-controls-title" class="panel__title">Controles de exploración</h2>
         <div class="controls-row">
-          <button type="button" class="btn btn--ghost" disabled>Anterior</button>
-          <button type="button" class="btn btn--ghost" disabled>Siguiente</button>
-          <button type="button" class="btn btn--ghost" disabled>Ver todos</button>
-          <span class="badge">Próximamente</span>
+          <button type="button" class="btn btn--ghost" id="explore-prev">Anterior</button>
+          <p class="counter" id="explore-counter"><span id="explore-counter-num">–</span> de 13</p>
+          <button type="button" class="btn btn--ghost" id="explore-next">Siguiente</button>
+          <button type="button" class="btn btn--ghost" id="explore-toggle-list" aria-expanded="true" aria-controls="component-list">Ocultar lista</button>
+          <label class="check">
+            <input type="checkbox" id="explore-markers" checked>
+            <span>Mostrar números en la tarjeta</span>
+          </label>
         </div>
+        <ol class="component-list" id="component-list" aria-label="Lista de los 13 componentes"></ol>
       </div>
     </section>
 
