@@ -639,7 +639,21 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
   border-radius: var(--radius-md);
   font-weight: 600;
 }
+.swatch { position: relative; cursor: pointer; }
 .swatch input { position: absolute; opacity: 0; pointer-events: none; }
+.swatch:hover { border-color: var(--c-primary); }
+.swatch__name { flex: 1; }
+.swatch__check {
+  width: 20px; height: 20px; flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--c-border);
+}
+.swatch:has(input:checked) { border-color: var(--c-text); background: var(--c-accent-soft); box-shadow: inset 0 0 0 1px var(--c-text); }
+.swatch input:checked ~ .swatch__check {
+  border-color: var(--c-text);
+  background: var(--c-text) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 10 3.5 3.5L15 7' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
+.swatch:has(input:focus-visible) { box-shadow: var(--focus-ring); }
 .swatch__dot { width: 22px; height: 22px; border-radius: 50%; flex: none; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15); }
 .swatch__dot--rojo { background: #E5484D; }
 .swatch__dot--verde { background: #30A46C; }
@@ -660,6 +674,82 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
 }
 
 .panel--help { background: var(--c-secondary-soft); border-color: transparent; box-shadow: none; }
+
+/* A3: mensajes, lista de LEDs, esquema y glosario */
+.feedback:empty { display: none; }
+.feedback {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 5px solid var(--c-secondary);
+  background: var(--c-secondary-soft);
+  font-weight: 600;
+}
+.feedback--ok { border-left-color: #1D6B45; background: #E3F4EA; color: #164F33; }
+.feedback--error { border-left-color: var(--c-danger); background: #FBE9E6; color: #8A2A1B; }
+
+.connections__count { font-weight: 600; font-size: var(--fs-sm); color: var(--c-text-muted); }
+.connection--led {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  border: 2px solid var(--c-border);
+  border-left: 8px solid var(--led-color, var(--c-primary));
+  color: var(--c-text);
+}
+.connection__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.connection__dot { width: 18px; height: 18px; border-radius: 50%; background: var(--led-color); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18); }
+.connection__head .connection__status {
+  margin-left: 0;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--c-bg);
+  color: var(--c-text-muted);
+  font-weight: 600;
+}
+.connection__path { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--fs-sm); color: var(--c-text-muted); }
+.connection__path .connection__part { color: var(--c-text); }
+.btn--remove { grid-column: 2; grid-row: 1; min-height: 44px; padding: var(--space-2) var(--space-4); color: var(--c-danger); }
+
+.circuit-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.circuit { width: 100%; min-width: 540px; height: auto; display: block; }
+.circuit-note { margin-top: var(--space-3); color: var(--c-text-muted); font-size: var(--fs-sm); text-align: center; }
+.circuit-note__swipe { display: none; }
+.circuit__pcb { fill: #00818A; }
+.circuit__header { fill: #1E2633; }
+.circuit__pin { fill: #8E9BAD; }
+.circuit__pin.is-used { stroke: #FFFFFF; stroke-width: 3; }
+.circuit__pin-label { fill: #FFFFFF; font: 700 14px var(--font-sans); text-anchor: middle; }
+.circuit__board-label { fill: #FFFFFF; font: 700 15px var(--font-sans); text-anchor: middle; opacity: 0.9; }
+.circuit__wire { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.circuit__wire--signal { stroke: var(--led-dark); }
+.circuit__wire--gnd { stroke: var(--c-text); }
+.circuit__junction { fill: var(--c-text); }
+.circuit__resistor { fill: #E8D3A8; stroke: #9C7B4A; stroke-width: 2; }
+.circuit__bulb { fill: var(--led-fill); stroke: var(--led-dark); stroke-width: 3; }
+.circuit__led.is-off .circuit__bulb { fill-opacity: 0.35; }
+.circuit__flat { stroke: var(--led-dark); stroke-width: 3; }
+.circuit__sign { fill: var(--c-text); font: 800 16px var(--font-sans); text-anchor: middle; dominant-baseline: central; }
+.circuit__label { fill: var(--c-text); font: 700 12px var(--font-sans); text-anchor: middle; dominant-baseline: central; }
+.circuit__label--gnd { text-anchor: start; font-size: 14px; }
+.circuit__tag { fill: #FFFFFF; font: 800 12px var(--font-sans); text-anchor: middle; }
+
+.glossary { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+.glossary__item {
+  border-radius: var(--radius-sm);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+.glossary__item summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 700;
+  cursor: pointer;
+}
+.glossary__item p { padding: 0 var(--space-3) var(--space-3); }
 .tips { padding-left: 1.2em; display: grid; gap: var(--space-2); }
 
 /* 10. Vista Programa ------------------------------------- */
@@ -692,7 +782,8 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
 .toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
 
 .stage--virtual { gap: var(--space-4); min-height: 220px; align-content: center; }
-.led-slots { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-5); }
+.led-slots { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-5); }
+.led-slots:empty { display: none; }
 .led-slot {
   display: grid;
   justify-items: center;
@@ -704,9 +795,11 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
 .led-slot__bulb {
   width: 34px; height: 44px;
   border-radius: 17px 17px 6px 6px;
-  border: 2px dashed #9AA6B8;
-  background: var(--c-surface);
+  border: 3px solid var(--led-color, #9AA6B8);
+  background: color-mix(in srgb, var(--led-color, #FFFFFF) 35%, #FFFFFF);
 }
+.led-slot strong { color: var(--c-text); }
+.led-slot__state { padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--c-surface); }
 
 .console {
   list-style: none;
@@ -755,6 +848,7 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
   .hero__title { font-size: 2.25rem; }
   .btn--lg { width: 100%; }
   .check { margin-left: 0; }
+  .circuit-note__swipe { display: inline; }
   .board__marker-hit { r: 22px; }
   .panel--stage .stage--board { padding: 0; }
   .controls-row .btn { flex: 1 1 auto; }

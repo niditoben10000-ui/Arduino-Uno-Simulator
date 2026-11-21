@@ -372,48 +372,50 @@
 
       <div class="layout-split layout-split--wide-side">
         <div class="panel panel--stage" aria-labelledby="circuit-title">
-          <h2 id="circuit-title" class="panel__title">Tu circuito</h2>
+          <div class="panel__head">
+            <h2 id="circuit-title" class="panel__title">Tu circuito</h2>
+            <span class="badge badge--demo">Esquema simplificado</span>
+          </div>
           <div class="stage stage--circuit" id="circuit-area" data-slot="circuit-area">
-            <p class="stage__empty">Todavía no hay LEDs conectados.</p>
+            <div class="circuit-scroll" id="circuit-scroll">
+              <!-- Esquema simplificado: los pines se dibujan más separados que en la tarjeta real.
+                   El contenido lo genera script.js (CircuitView) a partir de state.leds. -->
+              <svg class="circuit" id="circuit-svg" viewBox="0 0 680 420" role="img" aria-labelledby="circuit-svg-title circuit-svg-desc">
+                <title id="circuit-svg-title">Esquema del circuito</title>
+                <desc id="circuit-svg-desc">Todavía no hay LEDs conectados.</desc>
+                <g id="circuit-board"></g>
+                <g id="circuit-leds"></g>
+              </svg>
+            </div>
+            <p class="circuit-note">Esquema simplificado: los pines se ven más separados que en la tarjeta real. <span class="circuit-note__swipe">Desliza para ver todo el circuito.</span></p>
           </div>
 
           <div class="connections" aria-labelledby="connections-title">
-            <h3 id="connections-title" class="panel__subtitle">Conexiones</h3>
-            <ul class="connection-list" id="connection-list" data-slot="connection-list">
-              <li class="connection connection--empty">
-                <span class="connection__part">LED</span>
-                <span class="connection__arrow" aria-hidden="true">→</span>
-                <span class="connection__part">Resistencia</span>
-                <span class="connection__arrow" aria-hidden="true">→</span>
-                <span class="connection__part">GND</span>
-                <span class="connection__status">Sin conectar</span>
-              </li>
-            </ul>
+            <h3 id="connections-title" class="panel__subtitle">Conexiones <span class="connections__count" id="led-count">0 de 3 LEDs</span></h3>
+            <ul class="connection-list" id="connection-list" data-slot="connection-list"></ul>
           </div>
         </div>
 
         <div class="side-stack">
-          <form class="panel" aria-labelledby="led-color-title" onsubmit="return false">
-            <fieldset class="fieldset" disabled>
-              <legend id="led-color-title" class="panel__title">Color del LED <span class="badge">Próximamente</span></legend>
-              <div class="swatches">
-                <label class="swatch"><input type="radio" name="led-color" value="rojo"><span class="swatch__dot swatch__dot--rojo"></span>Rojo</label>
-                <label class="swatch"><input type="radio" name="led-color" value="verde"><span class="swatch__dot swatch__dot--verde"></span>Verde</label>
-                <label class="swatch"><input type="radio" name="led-color" value="amarillo"><span class="swatch__dot swatch__dot--amarillo"></span>Amarillo</label>
-                <label class="swatch"><input type="radio" name="led-color" value="azul"><span class="swatch__dot swatch__dot--azul"></span>Azul</label>
-              </div>
-            </fieldset>
-          </form>
+          <form class="side-stack" id="connect-form" novalidate>
+            <div class="panel">
+              <fieldset class="fieldset">
+                <legend id="led-color-title" class="panel__title">Color del LED</legend>
+                <div class="swatches" id="color-options"></div>
+              </fieldset>
+            </div>
 
-          <form class="panel" aria-labelledby="led-pin-title" onsubmit="return false">
-            <fieldset class="fieldset" disabled>
-              <legend id="led-pin-title" class="panel__title">Pin digital <span class="badge">Próximamente</span></legend>
-              <label class="field-label" for="pin-select">Elige un pin de D2 a D13</label>
-              <select id="pin-select" class="select" data-slot="pin-select">
-                <option value="">Selecciona un pin</option>
-              </select>
-              <button type="button" class="btn btn--primary btn--block">Conectar LED</button>
-            </fieldset>
+            <div class="panel">
+              <fieldset class="fieldset">
+                <legend id="led-pin-title" class="panel__title">Pin digital</legend>
+                <label class="field-label" for="pin-select">Elige un pin de D2 a D13</label>
+                <select id="pin-select" class="select" data-slot="pin-select">
+                  <option value="">Selecciona un pin</option>
+                </select>
+                <button type="submit" class="btn btn--primary btn--block" id="connect-button">Conectar LED</button>
+                <p class="feedback" id="connect-feedback" role="status" aria-live="polite"></p>
+              </fieldset>
+            </div>
           </form>
 
           <aside class="panel panel--help" aria-labelledby="help-conecta-title">
@@ -423,6 +425,28 @@
               <li>Cada LED usa una resistencia para protegerse.</li>
               <li>La pata corta del LED va a GND.</li>
             </ul>
+            <div class="glossary">
+              <details class="glossary__item">
+                <summary>¿Qué es un pin digital?</summary>
+                <p>Es una conexión que Arduino puede utilizar para enviar señales digitales, como las que sirven para controlar un LED.</p>
+              </details>
+              <details class="glossary__item">
+                <summary>¿Para qué sirve la resistencia?</summary>
+                <p>Ayuda a limitar la corriente que pasa por el LED para protegerlo. En este circuito mide 220 Ω (ohmios).</p>
+              </details>
+              <details class="glossary__item">
+                <summary>¿Qué es GND?</summary>
+                <p>Es la conexión de referencia a tierra que permite completar el circuito.</p>
+              </details>
+              <details class="glossary__item">
+                <summary>¿Qué es el ánodo?</summary>
+                <p>Es el terminal positivo (+) del LED. Es la pata más larga.</p>
+              </details>
+              <details class="glossary__item">
+                <summary>¿Qué es el cátodo?</summary>
+                <p>Es el terminal negativo (−) del LED. Es la pata más corta.</p>
+              </details>
+            </div>
           </aside>
         </div>
       </div>
@@ -457,12 +481,8 @@
           <div class="panel panel--stage" aria-labelledby="virtual-title">
             <h2 id="virtual-title" class="panel__title">Arduino virtual</h2>
             <div class="stage stage--virtual" id="virtual-board" data-slot="virtual-board">
-              <div class="led-slots" aria-label="LEDs conectados">
-                <span class="led-slot"><span class="led-slot__bulb"></span>LED 1</span>
-                <span class="led-slot"><span class="led-slot__bulb"></span>LED 2</span>
-                <span class="led-slot"><span class="led-slot__bulb"></span>LED 3</span>
-              </div>
-              <p class="stage__empty">Los LEDs aparecerán aquí cuando los conectes.</p>
+              <ul class="led-slots" id="program-leds" aria-label="LEDs conectados"></ul>
+              <p class="stage__empty" id="program-leds-empty">Los LEDs aparecerán aquí cuando los conectes en «Conecta tus LEDs».</p>
             </div>
           </div>
 

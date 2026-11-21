@@ -14,7 +14,10 @@
     explorer: {
       index: -1,     // posición en COMPONENTS (-1 = ninguno)
       partId: null   // subparte seleccionada (ICSP, LEDs, jack/diodo)
-    }
+    },
+    // A3: LEDs externos conectados. Cada LED: { id, color, pin, resistorOhms, groundPin, on }.
+    leds: [],
+    ledSeq: 0        // contador para identificadores únicos (no se reutilizan)
   };
 
   /* ---------- Registro de vistas ---------- */
@@ -932,6 +935,461 @@
     }
   };
 
+  /* =========================================================
+     A3: LEDs externos virtuales
+     Fuente de verdad: state.leds. Todas las vistas se dibujan
+     a partir de ese estado (Circuit.onChange).
+     ========================================================= */
+  var LED_COLORS = {
+    rojo: { name: 'Rojo', fill: '#E5484D', dark: '#A8282C' },
+    verde: { name: 'Verde', fill: '#30A46C', dark: '#1D6B45' },
+    amarillo: { name: 'Amarillo', fill: '#F4B942', dark: '#946500' },
+    azul: { name: 'Azul', fill: '#1769AA', dark: '#0E4472' }
+  };
+  var LED_LIMIT = 3;
+  var LED_RESISTOR_OHMS = 220;
+  var LED_GROUND_PIN = 'GND_D'; // GND del conector digital, junto a D13
+
+  function findPin(id) {
+    for (var i = 0; i < BOARD.pins.length; i++) {
+      if (BOARD.pins[i].id === id) { return BOARD.pins[i]; }
+    }
+    return null;
+  }
+
+  function digitalPins() {
+    return BOARD.pins.filter(function (pin) { return pin.digital; }).sort(function (a, b) {
+      return a.number - b.number;
+    });
+  }
+
+  function copyLed(led) {
+    return {
+      id: led.id, color: led.color, pin: led.pin,
+      resistorOhms: led.resistorOhms, groundPin: led.groundPin, on: led.on
+    };
+  }
+
+  /* ---------- Modelo de conexiones ---------- */
+  var Circuit = {
+    listeners: [],
+
+    onChange: function (listener) {
+      this.listeners.push(listener);
+    },
+
+    notify: function () {
+      var leds = this.getLeds();
+      this.listeners.forEach(function (listener) { listener(leds); });
+    },
+
+    /* Copia de los LEDs conectados, para consultar desde cualquier sección. */
+    getLeds: function () {
+      return state.leds.map(copyLed);
+    },
+
+    ledOnPin: function (pinId) {
+      for (var i = 0; i < state.leds.length; i++) {
+        if (state.leds[i].pin === pinId) { return copyLed(state.leds[i]); }
+      }
+      return null;
+    },
+
+    /* Posición actual del LED en la colección (0, 1, 2…) o -1 si ya no está. */
+    indexOf: function (id) {
+      for (var i = 0; i < state.leds.length; i++) {
+        if (state.leds[i].id === id) { return i; }
+      }
+      return -1;
+    },
+
+    /* Etiqueta visible: se calcula por posición, no a partir del id interno.
+       Un LED con id "led-7" puede mostrarse como «LED 2». Para un LED ya
+       eliminado se usa la etiqueta que tenía antes de quitarlo (led.label). */
+    label: function (led) {
+      var index = this.indexOf(led.id);
+      return index === -1 ? (led.label || 'LED') : 'LED ' + (index + 1);
+    },
+
+    add: function (color, pinId) {
+      if (state.leds.length >= LED_LIMIT) {
+        return { ok: false, field: null, message: 'Ya conectaste tres LEDs. Quita uno para agregar otro.' };
+      }
+      if (!LED_COLORS[color]) {
+        return { ok: false, field: 'color', message: 'Primero selecciona el color de tu LED.' };
+      }
+      var pin = findPin(pinId);
+      if (!pin || !pin.digital) {
+        return { ok: false, field: 'pin', message: 'Selecciona el pin digital donde conectarás tu LED.' };
+      }
+      if (this.ledOnPin(pinId)) {
+        return { ok: false, field: 'pin', message: 'Ese pin ya tiene un LED conectado. Elige otro.' };
+      }
+      state.ledSeq += 1;
+      var led = {
+        id: 'led-' + state.ledSeq,
+        color: color,
+        pin: pinId,
+        resistorOhms: LED_RESISTOR_OHMS,
+        groundPin: LED_GROUND_PIN,
+        on: false // se usará en la simulación (A5)
+      };
+      state.leds.push(led);
+      this.notify();
+      return {
+        ok: true,
+        led: copyLed(led),
+        message: '¡Muy bien! Conectaste un LED ' + LED_COLORS[color].name.toLowerCase() + ' al pin ' + pinId +
+          '. Tu LED está conectado correctamente y está listo para programarse.'
+      };
+    },
+
+    remove: function (id) {
+      for (var i = 0; i < state.leds.length; i++) {
+        if (state.leds[i].id === id) {
+          var label = this.label(state.leds[i]); // número visible antes de quitarlo
+          var removed = copyLed(state.leds.splice(i, 1)[0]);
+          removed.label = label;
+          this.notify();
+          return removed;
+        }
+      }
+      return null;
+    }
+  };
+
+  /* ---------- Vista Conecta: formulario y lista ---------- */
+  var ConnectView = {
+    els: {},
+
+    init: function () {
+      var self = this;
+      ['connect-form', 'color-options', 'pin-select', 'connect-feedback', 'connection-list', 'led-count', 'connect-button']
+        .forEach(function (id) { self.els[id] = document.getElementById(id); });
+      if (!this.els['connect-form']) { return; }
+
+      this.buildColors();
+      this.els['connect-form'].addEventListener('submit', function (event) {
+        event.preventDefault();
+        self.connect();
+      });
+      this.els['connection-list'].addEventListener('click', function (event) {
+        var button = event.target.closest('[data-remove]');
+        if (button) { self.removeLed(button.getAttribute('data-remove')); }
+      });
+      Circuit.onChange(function (leds) { self.render(leds); });
+      this.render(Circuit.getLeds());
+    },
+
+    buildColors: function () {
+      var box = this.els['color-options'];
+      Object.keys(LED_COLORS).forEach(function (key) {
+        var label = document.createElement('label');
+        label.className = 'swatch';
+        var input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'led-color';
+        input.value = key;
+        var dot = document.createElement('span');
+        dot.className = 'swatch__dot swatch__dot--' + key;
+        dot.setAttribute('aria-hidden', 'true');
+        var name = document.createElement('span');
+        name.className = 'swatch__name';
+        name.textContent = LED_COLORS[key].name;
+        var check = document.createElement('span');
+        check.className = 'swatch__check';
+        check.setAttribute('aria-hidden', 'true');
+        label.appendChild(input);
+        label.appendChild(dot);
+        label.appendChild(name);
+        label.appendChild(check);
+        box.appendChild(label);
+      });
+    },
+
+    selectedColor: function () {
+      var checked = this.els['connect-form'].querySelector('input[name="led-color"]:checked');
+      return checked ? checked.value : '';
+    },
+
+    showFeedback: function (message, type) {
+      var box = this.els['connect-feedback'];
+      box.textContent = message;
+      box.className = 'feedback feedback--' + type;
+    },
+
+    connect: function () {
+      var result = Circuit.add(this.selectedColor(), this.els['pin-select'].value);
+      this.showFeedback(result.message, result.ok ? 'ok' : 'error');
+      if (result.ok) {
+        this.els['pin-select'].value = '';
+      } else if (result.field === 'color') {
+        this.els['connect-form'].querySelector('input[name="led-color"]').focus();
+      } else if (result.field === 'pin') {
+        this.els['pin-select'].focus();
+      }
+    },
+
+    removeLed: function (id) {
+      var removed = Circuit.remove(id);
+      if (!removed) { return; }
+      this.showFeedback('Quitaste el ' + Circuit.label(removed) + '. El pin ' + removed.pin + ' quedó libre.', 'info');
+      var next = this.els['connection-list'].querySelector('[data-remove]');
+      (next || this.els['connect-button']).focus();
+    },
+
+    render: function (leds) {
+      this.els['led-count'].textContent = leds.length + ' de ' + LED_LIMIT + ' LEDs';
+      this.renderPinOptions(leds);
+      this.renderList(leds);
+    },
+
+    /* Indica qué pines están ocupados sin quitarlos de la lista. */
+    renderPinOptions: function (leds) {
+      Array.prototype.forEach.call(this.els['pin-select'].options, function (option) {
+        if (!option.value) { return; }
+        var used = null;
+        leds.forEach(function (led) { if (led.pin === option.value) { used = led; } });
+        option.textContent = used ? option.value + ' (ocupado: ' + Circuit.label(used) + ')' : option.value;
+      });
+    },
+
+    renderList: function (leds) {
+      var list = this.els['connection-list'];
+      clearEl(list);
+      if (!leds.length) {
+        var empty = document.createElement('li');
+        empty.className = 'connection connection--empty';
+        empty.textContent = 'Todavía no hay LEDs conectados. Elige un color y un pin.';
+        list.appendChild(empty);
+        return;
+      }
+      leds.forEach(function (led) {
+        var color = LED_COLORS[led.color];
+        var item = document.createElement('li');
+        item.className = 'connection connection--led';
+        item.setAttribute('data-led', led.id);
+        item.style.setProperty('--led-color', color.fill);
+
+        var head = document.createElement('p');
+        head.className = 'connection__head';
+        var dot = document.createElement('span');
+        dot.className = 'connection__dot';
+        dot.setAttribute('aria-hidden', 'true');
+        var name = document.createElement('strong');
+        name.textContent = Circuit.label(led);
+        var colorName = document.createElement('span');
+        colorName.textContent = color.name;
+        var status = document.createElement('span');
+        status.className = 'connection__status';
+        status.textContent = led.on ? 'Encendido' : 'Apagado';
+        head.appendChild(dot);
+        head.appendChild(name);
+        head.appendChild(colorName);
+        head.appendChild(status);
+
+        var path = document.createElement('p');
+        path.className = 'connection__path';
+        ['Pin ' + led.pin, 'Resistencia ' + led.resistorOhms + ' Ω', 'Ánodo (+)', 'Cátodo (−)', 'GND'].forEach(function (text, i) {
+          if (i > 0) {
+            var arrow = document.createElement('span');
+            arrow.className = 'connection__arrow';
+            arrow.setAttribute('aria-hidden', 'true');
+            arrow.textContent = '→';
+            path.appendChild(arrow);
+          }
+          var part = document.createElement('span');
+          part.className = 'connection__part';
+          part.textContent = text;
+          path.appendChild(part);
+        });
+
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn--ghost btn--remove';
+        remove.setAttribute('data-remove', led.id);
+        remove.setAttribute('aria-label', 'Quitar ' + Circuit.label(led) + ', ' + color.name.toLowerCase() + ', pin ' + led.pin);
+        remove.textContent = 'Quitar LED';
+
+        item.appendChild(head);
+        item.appendChild(path);
+        item.appendChild(remove);
+        list.appendChild(item);
+      });
+    }
+  };
+
+  /* ---------- Esquema del circuito (SVG simplificado) ---------- */
+  var CircuitView = {
+    Y: { rail: 60, cathode: 166, led: 185, anode: 204, resTop: 232, resBottom: 290, header: 334 },
+    pinX: {},
+    pinEls: {},
+
+    init: function () {
+      this.svg = document.getElementById('circuit-svg');
+      if (!this.svg) { return; }
+      this.ledsLayer = document.getElementById('circuit-leds');
+      this.desc = document.getElementById('circuit-svg-desc');
+      this.drawBoard();
+      var self = this;
+      Circuit.onChange(function (leds) { self.render(leds); });
+      this.render(Circuit.getLeds());
+    },
+
+    /* GND, D13 … D2 en el mismo orden que el conector real (con su separación entre D8 y D7). */
+    headerPins: function () {
+      var start = BOARD.pins.indexOf(findPin(LED_GROUND_PIN));
+      var end = BOARD.pins.indexOf(findPin('D2'));
+      return BOARD.pins.slice(start, end + 1);
+    },
+
+    drawBoard: function () {
+      var self = this;
+      var layer = document.getElementById('circuit-board');
+      var pins = this.headerPins();
+      pins.forEach(function (pin, i) {
+        self.pinX[pin.id] = 50 + i * 46 + (i >= 7 ? 16 : 0);
+      });
+      var first = this.pinX[pins[0].id];
+      var lastA = this.pinX['D8'];
+      var firstB = this.pinX['D7'];
+      var last = this.pinX[pins[pins.length - 1].id];
+
+      layer.appendChild(svgEl('rect', { 'class': 'circuit__pcb', x: 14, y: 318, width: 652, height: 96, rx: 12 }));
+      layer.appendChild(svgEl('rect', { 'class': 'circuit__header', x: first - 19, y: 322, width: lastA - first + 38, height: 24, rx: 3 }));
+      layer.appendChild(svgEl('rect', { 'class': 'circuit__header', x: firstB - 19, y: 322, width: last - firstB + 38, height: 24, rx: 3 }));
+      pins.forEach(function (pin) {
+        var x = self.pinX[pin.id];
+        var rect = svgEl('rect', { 'class': 'circuit__pin', x: x - 6, y: self.Y.header - 6, width: 12, height: 12, rx: 2, 'data-circuit-pin': pin.id });
+        layer.appendChild(rect);
+        self.pinEls[pin.id] = rect;
+        var label = svgEl('text', { 'class': 'circuit__pin-label', x: x, y: 366 });
+        label.textContent = pin.ground ? 'GND' : pin.id;
+        layer.appendChild(label);
+      });
+      var title = svgEl('text', { 'class': 'circuit__board-label', x: 340, y: 402 });
+      title.textContent = 'Arduino Uno: conector digital';
+      layer.appendChild(title);
+    },
+
+    render: function (leds) {
+      var self = this;
+      var Y = this.Y;
+      clearEl(this.ledsLayer);
+      Object.keys(this.pinEls).forEach(function (id) {
+        self.pinEls[id].removeAttribute('style');
+        self.pinEls[id].classList.remove('is-used');
+      });
+      this.svg.classList.toggle('has-leds', leds.length > 0);
+
+      if (!leds.length) {
+        this.desc.textContent = 'Todavía no hay LEDs conectados.';
+        return;
+      }
+
+      // Línea común de GND: une todos los cátodos con el pin GND.
+      var gx = this.pinX[LED_GROUND_PIN];
+      var maxX = gx;
+      leds.forEach(function (led) { maxX = Math.max(maxX, self.pinX[led.pin]); });
+      var ground = svgEl('g', { 'class': 'circuit__ground' });
+      ground.appendChild(svgEl('path', { 'class': 'circuit__wire circuit__wire--gnd', d: 'M' + maxX + ' ' + Y.rail + 'H' + gx + 'V' + (Y.header - 6) }));
+      var gLabel = svgEl('text', { 'class': 'circuit__label circuit__label--gnd', x: gx + 10, y: Y.rail - 10 });
+      gLabel.textContent = 'GND';
+      ground.appendChild(gLabel);
+      this.ledsLayer.appendChild(ground);
+      this.pinEls[LED_GROUND_PIN].classList.add('is-used');
+
+      var parts = [];
+      leds.forEach(function (led) {
+        var x = self.pinX[led.pin];
+        var color = LED_COLORS[led.color];
+        var g = svgEl('g', { 'class': 'circuit__led' + (led.on ? ' is-on' : ' is-off'), 'data-led': led.id });
+        g.style.setProperty('--led-fill', color.fill);
+        g.style.setProperty('--led-dark', color.dark);
+
+        // Pin → resistencia
+        g.appendChild(svgEl('line', { 'class': 'circuit__wire circuit__wire--signal', x1: x, y1: Y.header - 6, x2: x, y2: Y.resBottom }));
+        // Resistencia de 220 Ω (bandas rojo, rojo, café y dorado)
+        g.appendChild(svgEl('rect', { 'class': 'circuit__resistor', x: x - 8, y: Y.resTop, width: 16, height: Y.resBottom - Y.resTop, rx: 5 }));
+        [['#C62828', 242], ['#C62828', 252], ['#6D4C2F', 262], ['#C9A227', 276]].forEach(function (band) {
+          g.appendChild(svgEl('rect', { x: x - 8, y: band[1], width: 16, height: 5, fill: band[0] }));
+        });
+        var rLabel = svgEl('text', {
+          'class': 'circuit__label circuit__label--res',
+          x: x - 15, y: (Y.resTop + Y.resBottom) / 2,
+          transform: 'rotate(-90 ' + (x - 15) + ' ' + ((Y.resTop + Y.resBottom) / 2) + ')'
+        });
+        rLabel.textContent = led.resistorOhms + ' Ω';
+        g.appendChild(rLabel);
+        // Resistencia → ánodo
+        g.appendChild(svgEl('line', { 'class': 'circuit__wire circuit__wire--signal', x1: x, y1: Y.resTop, x2: x, y2: Y.anode }));
+        // LED (ánodo + abajo, cátodo − arriba)
+        g.appendChild(svgEl('circle', { 'class': 'circuit__bulb', cx: x, cy: Y.led, r: 19 }));
+        g.appendChild(svgEl('line', { 'class': 'circuit__flat', x1: x - 11, y1: Y.cathode + 4, x2: x + 11, y2: Y.cathode + 4 }));
+        var minus = svgEl('text', { 'class': 'circuit__sign', x: x, y: Y.led - 6 });
+        minus.textContent = '−';
+        var plus = svgEl('text', { 'class': 'circuit__sign', x: x, y: Y.led + 9 });
+        plus.textContent = '+';
+        g.appendChild(minus);
+        g.appendChild(plus);
+        // Cátodo → GND
+        g.appendChild(svgEl('line', { 'class': 'circuit__wire circuit__wire--gnd', x1: x, y1: Y.cathode, x2: x, y2: Y.rail }));
+        g.appendChild(svgEl('circle', { 'class': 'circuit__junction', cx: x, cy: Y.rail, r: 5 }));
+        // Etiqueta del LED bajo su pin
+        var tag = svgEl('text', { 'class': 'circuit__tag', x: x, y: 384 });
+        tag.textContent = Circuit.label(led).replace('LED ', 'LED ');
+        g.appendChild(tag);
+
+        self.ledsLayer.appendChild(g);
+        var pinEl = self.pinEls[led.pin];
+        pinEl.classList.add('is-used');
+        pinEl.style.fill = color.fill;
+        parts.push(Circuit.label(led) + ' ' + color.name.toLowerCase() + ': pin ' + led.pin +
+          ', resistencia de ' + led.resistorOhms + ' ohmios, ánodo, cátodo y GND. Apagado.');
+      });
+      this.desc.textContent = parts.join(' ');
+    }
+  };
+
+  /* ---------- Programa: panel de LEDs conectados (solo consulta) ---------- */
+  var ProgramLedsView = {
+    init: function () {
+      this.list = document.getElementById('program-leds');
+      this.empty = document.getElementById('program-leds-empty');
+      if (!this.list) { return; }
+      var self = this;
+      Circuit.onChange(function (leds) { self.render(leds); });
+      this.render(Circuit.getLeds());
+    },
+
+    render: function (leds) {
+      var list = this.list;
+      clearEl(list);
+      this.empty.hidden = leds.length > 0;
+      leds.forEach(function (led) {
+        var color = LED_COLORS[led.color];
+        var item = document.createElement('li');
+        item.className = 'led-slot';
+        item.style.setProperty('--led-color', color.fill);
+        var bulb = document.createElement('span');
+        bulb.className = 'led-slot__bulb' + (led.on ? ' is-on' : '');
+        bulb.setAttribute('aria-hidden', 'true');
+        var name = document.createElement('strong');
+        name.textContent = Circuit.label(led);
+        var detail = document.createElement('span');
+        detail.textContent = color.name + ', pin ' + led.pin;
+        var status = document.createElement('span');
+        status.className = 'led-slot__state';
+        status.textContent = led.on ? 'Encendido' : 'Apagado';
+        item.appendChild(bulb);
+        item.appendChild(name);
+        item.appendChild(detail);
+        item.appendChild(status);
+        list.appendChild(item);
+      });
+    }
+  };
+
   /* ---------- Preparación de vistas (contenido estático) ---------- */
   var DEMO_CODE = [
     '// Ejemplo de demostración (todavía no se ejecuta)',
@@ -963,9 +1421,7 @@
   function renderPinOptions() {
     var select = document.getElementById('pin-select');
     if (!select) { return; }
-    BOARD.pins.filter(function (pin) { return pin.digital; }).sort(function (a, b) {
-      return a.number - b.number;
-    }).forEach(function (pin) {
+    digitalPins().forEach(function (pin) {
       var option = document.createElement('option');
       option.value = pin.id;
       option.textContent = pin.id;
@@ -979,6 +1435,9 @@
     renderPinOptions();
     Explorer.init();
     BoardZoom.init();
+    ConnectView.init();
+    CircuitView.init();
+    ProgramLedsView.init();
     Router.init();
   }
 
