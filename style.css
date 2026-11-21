@@ -779,7 +779,7 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
   overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.12);
   font: var(--editor-font) / var(--editor-line) var(--font-mono);
-  color: #7E8BA3;
+  color: #8B98AE; /* contraste 4,95:1 sobre el fondo del editor */
   text-align: right;
   user-select: none;
 }
@@ -884,8 +884,8 @@ h1:focus, main:focus { outline: none; box-shadow: none; }
 .analysis__goto {
   display: inline-block;
   margin-left: var(--space-2);
-  padding: 2px var(--space-2);
-  min-height: 32px;
+  padding: 2px var(--space-3);
+  min-height: 44px;
   border: 2px solid var(--c-border);
   border-radius: var(--radius-sm);
   background: var(--c-surface);
