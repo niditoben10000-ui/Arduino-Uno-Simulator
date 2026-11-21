@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es-419">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Aplicación educativa para conocer el Arduino Uno, conectar LEDs y programarlos.">
+  <title>Arduino Uno Simulator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="#inicio" data-nav="inicio" aria-label="Arduino Uno Simulator, ir a Inicio">
+        <svg class="brand__logo" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+          <rect x="2" y="6" width="36" height="28" rx="6" fill="#008C95"/>
+          <rect x="9" y="13" width="12" height="14" rx="2" fill="#253247"/>
+          <circle cx="29" cy="15" r="3.5" fill="#F4B942"/>
+          <rect x="25" y="23" width="8" height="4" rx="1" fill="#FFFFFF" opacity=".85"/>
+        </svg>
+        <span class="brand__name">Arduino Uno Simulator</span>
+      </a>
+
+      <nav class="main-nav" aria-label="Secciones principales">
+        <ul class="main-nav__list">
+          <li><a class="main-nav__link" href="#inicio" data-nav="inicio">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+            <span>Inicio</span></a></li>
+          <li><a class="main-nav__link" href="#conoce" data-nav="conoce">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/></svg>
+            <span>Conoce</span></a></li>
+          <li><a class="main-nav__link" href="#conecta" data-nav="conecta">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/></svg>
+            <span>Conecta</span></a></li>
+          <li><a class="main-nav__link" href="#programa" data-nav="programa">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>
+            <span>Programa</span></a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="contenido" class="views" tabindex="-1">
+
+    <!-- ===================== VISTA 1: INICIO ===================== -->
+    <section class="view view--inicio" id="view-inicio" data-view="inicio" aria-labelledby="titulo-inicio">
+      <div class="hero">
+        <div class="hero__text">
+          <h1 id="titulo-inicio" class="hero__title" tabindex="-1">Arduino Uno Simulator</h1>
+          <p class="hero__tagline">Aprende, conecta y programa LEDs</p>
+          <p class="hero__intro">¡Vamos a conocer Arduino! Aquí vas a descubrir las partes de la tarjeta, conectar LEDs de colores y escribir instrucciones para encenderlos.</p>
+          <a class="btn btn--primary btn--lg" href="#conoce" data-nav="conoce">Empezar a explorar</a>
+        </div>
+
+        <figure class="hero__art">
+          <svg class="hero-board" viewBox="0 0 420 300" role="img" aria-labelledby="hero-art-title">
+            <title id="hero-art-title">Ilustración de una tarjeta Arduino conectada a un LED amarillo encendido</title>
+            <!-- Cable y LED -->
+            <path class="hero-board__wire" d="M318 70 C 360 70, 372 40, 380 22" />
+            <path class="hero-board__wire hero-board__wire--gnd" d="M302 70 C 300 30, 350 14, 368 22" />
+            <g class="hero-board__led">
+              <circle class="hero-board__glow" cx="374" cy="0" r="30"/>
+              <path d="M360 22 v-18 a14 14 0 0 1 28 0 v18 z" fill="#F4B942"/>
+              <rect x="356" y="20" width="36" height="6" rx="2" fill="#E0A42E"/>
+            </g>
+            <!-- Placa -->
+            <rect x="20" y="60" width="340" height="220" rx="22" fill="#008C95"/>
+            <rect x="20" y="60" width="340" height="220" rx="22" fill="none" stroke="#006E75" stroke-width="4"/>
+            <!-- Filas de pines (decorativas) -->
+            <g fill="#253247">
+              <rect x="120" y="68" width="220" height="16" rx="4"/>
+              <rect x="150" y="256" width="190" height="16" rx="4"/>
+            </g>
+            <g fill="#F4B942">
+              <circle cx="134" cy="76" r="3"/><circle cx="152" cy="76" r="3"/><circle cx="170" cy="76" r="3"/><circle cx="188" cy="76" r="3"/>
+              <circle cx="206" cy="76" r="3"/><circle cx="224" cy="76" r="3"/><circle cx="242" cy="76" r="3"/><circle cx="260" cy="76" r="3"/>
+              <circle cx="278" cy="76" r="3"/><circle cx="296" cy="76" r="3"/><circle cx="314" cy="76" r="3"/><circle cx="330" cy="76" r="3"/>
+              <circle cx="166" cy="264" r="3"/><circle cx="184" cy="264" r="3"/><circle cx="202" cy="264" r="3"/><circle cx="220" cy="264" r="3"/>
+              <circle cx="256" cy="264" r="3"/><circle cx="274" cy="264" r="3"/><circle cx="292" cy="264" r="3"/><circle cx="310" cy="264" r="3"/><circle cx="326" cy="264" r="3"/>
+            </g>
+            <!-- Conectores (decorativos) -->
+            <rect x="4" y="96" width="62" height="58" rx="6" fill="#C8D2DE"/>
+            <rect x="10" y="196" width="48" height="50" rx="8" fill="#253247"/>
+            <!-- Chip -->
+            <rect x="170" y="150" width="150" height="54" rx="6" fill="#253247"/>
+            <g fill="#C8D2DE">
+              <rect x="180" y="144" width="6" height="6"/><rect x="198" y="144" width="6" height="6"/><rect x="216" y="144" width="6" height="6"/><rect x="234" y="144" width="6" height="6"/><rect x="252" y="144" width="6" height="6"/><rect x="270" y="144" width="6" height="6"/><rect x="288" y="144" width="6" height="6"/><rect x="306" y="144" width="6" height="6"/>
+              <rect x="180" y="204" width="6" height="6"/><rect x="198" y="204" width="6" height="6"/><rect x="216" y="204" width="6" height="6"/><rect x="234" y="204" width="6" height="6"/><rect x="252" y="204" width="6" height="6"/><rect x="270" y="204" width="6" height="6"/><rect x="288" y="204" width="6" height="6"/><rect x="306" y="204" width="6" height="6"/>
+            </g>
+            <!-- Botón -->
+            <circle cx="96" cy="100" r="11" fill="#C8D2DE"/><circle cx="96" cy="100" r="6" fill="#1769AA"/>
+            <text x="190" y="235" class="hero-board__label">UNO</text>
+          </svg>
+        </figure>
+      </div>
+
+      <h2 class="section-heading">¿Qué quieres hacer hoy?</h2>
+      <ul class="path-cards">
+        <li>
+          <a class="path-card path-card--conoce" href="#conoce" data-nav="conoce">
+            <span class="path-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/></svg>
+            </span>
+            <span class="path-card__title">Conoce tu Arduino</span>
+            <span class="path-card__text">Descubre para qué sirve cada componente.</span>
+          </a>
+        </li>
+        <li>
+          <a class="path-card path-card--conecta" href="#conecta" data-nav="conecta">
+            <span class="path-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/></svg>
+            </span>
+            <span class="path-card__title">Conecta tus LEDs</span>
+            <span class="path-card__text">Conecta un LED y aprende a controlarlo.</span>
+          </a>
+        </li>
+        <li>
+          <a class="path-card path-card--programa" href="#programa" data-nav="programa">
+            <span class="path-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>
+            </span>
+            <span class="path-card__title">Programa tus LEDs</span>
+            <span class="path-card__text">Escribe instrucciones y observa qué sucede.</span>
+          </a>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ===================== VISTA 2: CONOCE ===================== -->
+    <section class="view view--conoce" id="view-conoce" data-view="conoce" aria-labelledby="titulo-conoce" hidden>
+      <header class="view-header">
+        <h1 id="titulo-conoce" class="view-header__title" tabindex="-1">Conoce tu Arduino Uno</h1>
+        <p class="view-header__lead">Selecciona un componente para descubrir cómo funciona.</p>
+      </header>
+
+      <div class="layout-split">
+        <div class="panel panel--stage" aria-labelledby="conoce-stage-title">
+          <h2 id="conoce-stage-title" class="visually-hidden">Tarjeta Arduino Uno R3</h2>
+          <div class="stage" id="board-explorer" data-slot="board-explorer">
+            <svg class="board-preview" viewBox="0 0 400 290" role="img" aria-labelledby="board-preview-title">
+              <title id="board-preview-title">Silueta preliminar de la tarjeta Arduino Uno. Las zonas interactivas aún no están disponibles.</title>
+              <rect x="10" y="10" width="380" height="270" rx="18" fill="#008C95" opacity=".14" stroke="#008C95" stroke-width="3" stroke-dasharray="10 8"/>
+              <text x="200" y="138" text-anchor="middle" class="board-preview__label">Arduino Uno R3</text>
+              <text x="200" y="166" text-anchor="middle" class="board-preview__hint">Vista preliminar</text>
+            </svg>
+          </div>
+          <p class="soon-note"><span class="badge">Próximamente</span> Aquí podrás tocar cada parte de la tarjeta.</p>
+        </div>
+
+        <aside class="panel panel--info" aria-labelledby="info-title" aria-live="polite">
+          <h2 id="info-title" class="panel__title">Información</h2>
+          <div class="info-card" id="component-info" data-slot="component-info">
+            <p class="info-card__name">Ningún componente seleccionado</p>
+            <p class="info-card__text">Cuando elijas una parte de la tarjeta, aquí verás su nombre y para qué sirve.</p>
+          </div>
+        </aside>
+      </div>
+
+      <div class="panel panel--controls" aria-labelledby="explore-controls-title">
+        <h2 id="explore-controls-title" class="panel__title">Controles de exploración</h2>
+        <div class="controls-row">
+          <button type="button" class="btn btn--ghost" disabled>Anterior</button>
+          <button type="button" class="btn btn--ghost" disabled>Siguiente</button>
+          <button type="button" class="btn btn--ghost" disabled>Ver todos</button>
+          <span class="badge">Próximamente</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA 3: CONECTA ===================== -->
+    <section class="view view--conecta" id="view-conecta" data-view="conecta" aria-labelledby="titulo-conecta" hidden>
+      <header class="view-header">
+        <h1 id="titulo-conecta" class="view-header__title" tabindex="-1">Conecta tus LEDs</h1>
+        <p class="view-header__lead">Conecta un LED y aprende a controlarlo.</p>
+      </header>
+
+      <div class="layout-split layout-split--wide-side">
+        <div class="panel panel--stage" aria-labelledby="circuit-title">
+          <h2 id="circuit-title" class="panel__title">Tu circuito</h2>
+          <div class="stage stage--circuit" id="circuit-area" data-slot="circuit-area">
+            <p class="stage__empty">Todavía no hay LEDs conectados.</p>
+          </div>
+
+          <div class="connections" aria-labelledby="connections-title">
+            <h3 id="connections-title" class="panel__subtitle">Conexiones</h3>
+            <ul class="connection-list" id="connection-list" data-slot="connection-list">
+              <li class="connection connection--empty">
+                <span class="connection__part">LED</span>
+                <span class="connection__arrow" aria-hidden="true">→</span>
+                <span class="connection__part">Resistencia</span>
+                <span class="connection__arrow" aria-hidden="true">→</span>
+                <span class="connection__part">GND</span>
+                <span class="connection__status">Sin conectar</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="side-stack">
+          <form class="panel" aria-labelledby="led-color-title" onsubmit="return false">
+            <fieldset class="fieldset" disabled>
+              <legend id="led-color-title" class="panel__title">Color del LED <span class="badge">Próximamente</span></legend>
+              <div class="swatches">
+                <label class="swatch"><input type="radio" name="led-color" value="rojo"><span class="swatch__dot swatch__dot--rojo"></span>Rojo</label>
+                <label class="swatch"><input type="radio" name="led-color" value="verde"><span class="swatch__dot swatch__dot--verde"></span>Verde</label>
+                <label class="swatch"><input type="radio" name="led-color" value="amarillo"><span class="swatch__dot swatch__dot--amarillo"></span>Amarillo</label>
+                <label class="swatch"><input type="radio" name="led-color" value="azul"><span class="swatch__dot swatch__dot--azul"></span>Azul</label>
+              </div>
+            </fieldset>
+          </form>
+
+          <form class="panel" aria-labelledby="led-pin-title" onsubmit="return false">
+            <fieldset class="fieldset" disabled>
+              <legend id="led-pin-title" class="panel__title">Pin digital <span class="badge">Próximamente</span></legend>
+              <label class="field-label" for="pin-select">Elige un pin de D2 a D13</label>
+              <select id="pin-select" class="select" data-slot="pin-select">
+                <option value="">Selecciona un pin</option>
+              </select>
+              <button type="button" class="btn btn--primary btn--block">Conectar LED</button>
+            </fieldset>
+          </form>
+
+          <aside class="panel panel--help" aria-labelledby="help-conecta-title">
+            <h2 id="help-conecta-title" class="panel__title">Ayuda</h2>
+            <ul class="tips">
+              <li>Puedes conectar hasta tres LEDs.</li>
+              <li>Cada LED usa una resistencia para protegerse.</li>
+              <li>La pata corta del LED va a GND.</li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA 4: PROGRAMA ===================== -->
+    <section class="view view--programa" id="view-programa" data-view="programa" aria-labelledby="titulo-programa" hidden>
+      <header class="view-header">
+        <h1 id="titulo-programa" class="view-header__title" tabindex="-1">Programa tus LEDs</h1>
+        <p class="view-header__lead">Escribe instrucciones y observa qué sucede.</p>
+      </header>
+
+      <div class="layout-columns">
+        <div class="panel panel--editor" aria-labelledby="editor-title">
+          <div class="panel__head">
+            <h2 id="editor-title" class="panel__title">Editor de código</h2>
+            <span class="badge badge--demo">Demostración: no se ejecuta</span>
+          </div>
+          <div class="code-view" id="code-editor" data-slot="code-editor">
+            <pre class="code-view__pre" aria-label="Código de ejemplo"><code id="demo-code"></code></pre>
+          </div>
+          <div class="toolbar" role="group" aria-label="Controles del programa">
+            <button type="button" class="btn btn--ghost" disabled>Cargar ejemplo</button>
+            <button type="button" class="btn btn--run" disabled>Ejecutar</button>
+            <button type="button" class="btn btn--stop" disabled>Detener</button>
+            <button type="button" class="btn btn--ghost" disabled>Reiniciar</button>
+          </div>
+          <p class="soon-note"><span class="badge">Próximamente</span> Los botones se activarán cuando el simulador esté listo.</p>
+        </div>
+
+        <div class="side-stack">
+          <div class="panel panel--stage" aria-labelledby="virtual-title">
+            <h2 id="virtual-title" class="panel__title">Arduino virtual</h2>
+            <div class="stage stage--virtual" id="virtual-board" data-slot="virtual-board">
+              <div class="led-slots" aria-label="LEDs conectados">
+                <span class="led-slot"><span class="led-slot__bulb"></span>LED 1</span>
+                <span class="led-slot"><span class="led-slot__bulb"></span>LED 2</span>
+                <span class="led-slot"><span class="led-slot__bulb"></span>LED 3</span>
+              </div>
+              <p class="stage__empty">Los LEDs aparecerán aquí cuando los conectes.</p>
+            </div>
+          </div>
+
+          <div class="panel panel--console" aria-labelledby="messages-title">
+            <h2 id="messages-title" class="panel__title">Mensajes</h2>
+            <ol class="console" id="run-messages" data-slot="run-messages" aria-live="polite">
+              <li class="console__line">El programa no se ha ejecutado.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel panel--guide" aria-labelledby="guide-title">
+        <h2 id="guide-title" class="panel__title">Modo guiado <span class="badge">Próximamente</span></h2>
+        <p class="guide__text" id="guide-steps" data-slot="guide-steps">Aquí verás paso a paso qué escribir para encender tu primer LED.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>Arduino Uno Simulator: un proyecto educativo para quinto grado.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
