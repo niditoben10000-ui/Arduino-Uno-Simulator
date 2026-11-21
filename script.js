@@ -24,7 +24,23 @@
       analysis: null,     // resultado de ArduinoParser.parse (+ pinInfo)
       analyzedCode: null, // código que produjo ese análisis
       stale: false        // false | 'code' | 'connections': el análisis ya no es vigente
-    }
+    },
+    // A5: simulación. pins: estado lógico de D2–D13 ('HIGH' | 'LOW').
+    sim: {
+      status: 'idle',     // 'idle' | 'running' | 'stopped'
+      pins: {},
+      program: null,      // copia de las acciones analizadas que se están ejecutando
+      cursor: null,
+      current: null,      // instrucción en curso (línea y acción)
+      loops: 0,
+      message: null,
+      notes: [],
+      notedPins: {}
+    },
+    // A5: indicadores de la tarjeta. ON: la tarjeta virtual está alimentada.
+    board: { ON: true, L: false, RX: false, TX: false },
+    // A5: modo de trabajo en Programa.
+    ui: { mode: 'guided', guideStep: 0 }
   };
 
   /* ---------- Registro de vistas ---------- */
@@ -354,7 +370,7 @@
       what: 'Son cuatro LEDs pequeños que vienen montados en la tarjeta.',
       purpose: 'Muestran información: si hay energía, si hay comunicación con la computadora y el estado del pin 13.',
       kid: 'Son como las luces del tablero de un auto: te avisan qué está pasando.',
-      note: 'En esta sección los LEDs aparecen apagados. Los verás funcionar en la simulación.',
+      note: 'El LED ON está encendido porque la tarjeta virtual tiene energía. L, RX y TX se activan cuando ejecutas un programa en «Programa tus LEDs».',
       zones: [
         { part: 'L', shape: { x: 253, y: 100.4, w: 26, h: 12 }, hit: { x: 244, y: 94, w: 44, h: 26 } },
         { part: 'TX', shape: { x: 253, y: 153.6, w: 26, h: 12 }, hit: { x: 244, y: 149, w: 44, h: 21 } },
@@ -1018,7 +1034,31 @@
       return index === -1 ? (led.label || 'LED') : 'LED ' + (index + 1);
     },
 
-    add: function (color, pinId) {
+    stateListeners: [],
+
+    /* A5: avisos de encendido/apagado (no cambian las conexiones). */
+    onLedState: function (listener) {
+      this.stateListeners.push(listener);
+    },
+
+    /* A5: el estado lógico del pin decide si su LED se enciende. Se busca por pin,
+       nunca por la posición ni por el número visible del LED. */
+    applyPin: function (pinId, high) {
+      var changed = false;
+      state.leds.forEach(function (led) {
+        if (led.pin === pinId && led.on !== high) {
+          led.on = high;
+          changed = true;
+        }
+      });
+      if (changed) {
+        var leds = this.getLeds();
+        this.stateListeners.forEach(function (listener) { listener(leds); });
+      }
+    },
+
+    /* Devuelve el error que impediría agregar el LED, o null si se puede agregar. */
+    check: function (color, pinId) {
       if (state.leds.length >= LED_LIMIT) {
         return { ok: false, field: null, message: 'Ya conectaste tres LEDs. Quita uno para agregar otro.' };
       }
@@ -1032,6 +1072,12 @@
       if (this.ledOnPin(pinId)) {
         return { ok: false, field: 'pin', message: 'Ese pin ya tiene un LED conectado. Elige otro.' };
       }
+      return null;
+    },
+
+    add: function (color, pinId) {
+      var problem = this.check(color, pinId);
+      if (problem) { return problem; }
       state.ledSeq += 1;
       var led = {
         id: 'led-' + state.ledSeq,
@@ -1085,7 +1131,19 @@
         if (button) { self.removeLed(button.getAttribute('data-remove')); }
       });
       Circuit.onChange(function (leds) { self.render(leds); });
+      Circuit.onLedState(function (leds) { self.renderStates(leds); });
       this.render(Circuit.getLeds());
+    },
+
+    /* A5: solo actualiza «Encendido/Apagado», sin reconstruir la lista. */
+    renderStates: function (leds) {
+      var list = this.els['connection-list'];
+      leds.forEach(function (led) {
+        var item = list.querySelector('[data-led="' + led.id + '"]');
+        if (!item) { return; }
+        item.classList.toggle('is-on', led.on);
+        item.querySelector('.connection__status').textContent = led.on ? 'Encendido' : 'Apagado';
+      });
     },
 
     buildColors: function () {
@@ -1126,8 +1184,15 @@
     },
 
     connect: function () {
-      var result = Circuit.add(this.selectedColor(), this.els['pin-select'].value);
-      this.showFeedback(result.message, result.ok ? 'ok' : 'error');
+      var color = this.selectedColor();
+      var pin = this.els['pin-select'].value;
+      var stopped = false;
+      if (!Circuit.check(color, pin) && Simulator.isRunning()) {
+        Simulator.stop('connections'); // primero se detiene, después cambia el circuito
+        stopped = true;
+      }
+      var result = Circuit.add(color, pin);
+      this.showFeedback((stopped ? 'Detuvimos la simulación para cambiar el circuito. ' : '') + result.message, result.ok ? 'ok' : 'error');
       if (result.ok) {
         this.els['pin-select'].value = '';
       } else if (result.field === 'color') {
@@ -1138,9 +1203,15 @@
     },
 
     removeLed: function (id) {
+      var stopped = false;
+      if (Circuit.indexOf(id) !== -1 && Simulator.isRunning()) {
+        Simulator.stop('connections'); // primero se detiene, después cambia el circuito
+        stopped = true;
+      }
       var removed = Circuit.remove(id);
       if (!removed) { return; }
-      this.showFeedback('Quitaste el ' + Circuit.label(removed) + '. El pin ' + removed.pin + ' quedó libre.', 'info');
+      this.showFeedback((stopped ? 'Detuvimos la simulación para cambiar el circuito. ' : '') +
+        'Quitaste el ' + Circuit.label(removed) + '. El pin ' + removed.pin + ' quedó libre.', 'info');
       var next = this.els['connection-list'].querySelector('[data-remove]');
       (next || this.els['connect-button']).focus();
     },
@@ -1240,7 +1311,19 @@
       this.drawBoard();
       var self = this;
       Circuit.onChange(function (leds) { self.render(leds); });
+      Circuit.onLedState(function (leds) { self.renderStates(leds); });
       this.render(Circuit.getLeds());
+    },
+
+    /* A5: enciende o apaga los LEDs del esquema sin redibujar los cables. */
+    renderStates: function (leds) {
+      var layer = this.ledsLayer;
+      leds.forEach(function (led) {
+        var g = layer.querySelector('[data-led="' + led.id + '"]');
+        if (!g) { return; }
+        g.classList.toggle('is-on', led.on);
+        g.classList.toggle('is-off', !led.on);
+      });
     },
 
     /* GND, D13 … D2 en el mismo orden que el conector real (con su separación entre D8 y D7). */
@@ -1366,7 +1449,19 @@
       if (!this.list) { return; }
       var self = this;
       Circuit.onChange(function (leds) { self.render(leds); });
+      Circuit.onLedState(function (leds) { self.renderStates(leds); });
       this.render(Circuit.getLeds());
+    },
+
+    renderStates: function (leds) {
+      var list = this.list;
+      leds.forEach(function (led) {
+        var item = list.querySelector('[data-led="' + led.id + '"]');
+        if (!item) { return; }
+        item.classList.toggle('is-on', led.on);
+        item.querySelector('.led-slot__bulb').classList.toggle('is-on', led.on);
+        item.querySelector('.led-slot__state').textContent = led.on ? 'Encendido' : 'Apagado';
+      });
     },
 
     render: function (leds) {
@@ -1376,7 +1471,8 @@
       leds.forEach(function (led) {
         var color = LED_COLORS[led.color];
         var item = document.createElement('li');
-        item.className = 'led-slot';
+        item.className = 'led-slot' + (led.on ? ' is-on' : '');
+        item.setAttribute('data-led', led.id);
         item.style.setProperty('--led-color', color.fill);
         var bulb = document.createElement('span');
         bulb.className = 'led-slot__bulb' + (led.on ? ' is-on' : '');
@@ -1960,6 +2056,12 @@
     return Number(String(pinId).replace('D', ''));
   }
 
+  /* Pin que usa el ejemplo 2: el del primer LED conectado o, si no hay, el 8.
+     La guía usa esta misma función para que su explicación coincida con el código. */
+  function examplePin(leds) {
+    return leds[0] ? pinNumber(leds[0].pin) : 8;
+  }
+
   function buildExample(id, leds) {
     if (id === 'blink-l') {
       return {
@@ -1981,7 +2083,7 @@
     }
     if (id === 'blink-external') {
       var led = leds[0];
-      var pin = led ? pinNumber(led.pin) : 8;
+      var pin = examplePin(leds);
       return {
         note: led
           ? 'Este ejemplo usa el pin ' + pin + ', donde conectaste el ' + Circuit.label(led) + ' ' + LED_COLORS[led.color].name.toLowerCase() + '.'
@@ -2101,6 +2203,9 @@
     onEdit: function () {
       var p = state.program;
       p.code = this.els['code-input'].value;
+      if (Simulator.isRunning() && p.code !== p.analyzedCode) {
+        Simulator.stop('code'); // el programa en ejecución ya no coincide con el código escrito
+      }
       if (p.analysis) {
         if (p.code === p.analyzedCode) {
           if (p.stale === 'code') { p.stale = false; }
@@ -2136,6 +2241,23 @@
         }
         return info;
       });
+    },
+
+    /* Usado por el modo guiado: carga un ejemplo con las mismas reglas que el botón. */
+    loadExample: function (id) {
+      this.els['example-select'].value = id;
+      this.requestExample();
+    },
+
+    /* A5: resalta en los números de línea la instrucción que se está ejecutando. */
+    markLine: function (line) {
+      if (this.currentLine === line) { return; }
+      var gutter = this.els['editor-gutter'];
+      if (!gutter) { return; }
+      var old = gutter.querySelector('.is-current');
+      if (old) { old.classList.remove('is-current'); }
+      this.currentLine = line;
+      if (line && gutter.children[line - 1]) { gutter.children[line - 1].classList.add('is-current'); }
     },
 
     requestExample: function () {
@@ -2206,7 +2328,7 @@
       clearEl(gutter);
       for (var i = 1; i <= count; i++) {
         var span = document.createElement('span');
-        span.className = 'editor__line' + (errorLines[i] ? ' has-error' : '');
+        span.className = 'editor__line' + (errorLines[i] ? ' has-error' : '') + (i === this.currentLine ? ' is-current' : '');
         span.textContent = String(i);
         gutter.appendChild(span);
       }
@@ -2306,6 +2428,7 @@
         body.appendChild(el);
       }
 
+      if (typeof SimView !== 'undefined') { SimView.render(); }
       if (this.exampleNote && p.code === this.exampleCode) { paragraph(this.exampleNote, 'analysis__note'); }
 
       if (!p.analysis) {
@@ -2368,8 +2491,552 @@
         h.textContent = '¿Qué hará tu programa?';
         body.appendChild(h);
         paragraph(self.describe(a), 'analysis__summary');
-        paragraph('Esto es solo una revisión: el programa todavía no se ejecuta y los LEDs siguen apagados.', 'analysis__hint');
+        paragraph('Esto es una revisión de tu código. Para verlo funcionar, presiona «Ejecutar».', 'analysis__hint');
       }
+    }
+  };
+
+  /* =========================================================
+     A5: indicadores de la tarjeta (ON, L, RX, TX).
+     ON: siempre encendido (la tarjeta virtual está alimentada).
+     L:  sigue al pin enlazado en BOARD.indicators (D13).
+     RX/TX: solo la animación educativa al iniciar un programa.
+     ========================================================= */
+  var INDICATOR_INFO = {
+    ON: 'Energía',
+    L: 'Pin 13',
+    TX: 'Envío (animación)',
+    RX: 'Recepción (animación)'
+  };
+
+  var Indicators = {
+    items: {},
+
+    init: function () {
+      var self = this;
+      var list = document.getElementById('board-leds');
+      ['ON', 'L', 'TX', 'RX'].forEach(function (name) {
+        var item = null;
+        if (list) {
+          item = document.createElement('li');
+          item.className = 'board-led board-led--' + name.toLowerCase();
+          item.setAttribute('data-board-led', name);
+          var dot = document.createElement('span');
+          dot.className = 'board-led__dot';
+          dot.setAttribute('aria-hidden', 'true');
+          var label = document.createElement('strong');
+          label.textContent = name;
+          var info = document.createElement('span');
+          info.className = 'board-led__info';
+          info.textContent = INDICATOR_INFO[name];
+          var stateText = document.createElement('span');
+          stateText.className = 'board-led__state';
+          item.appendChild(dot);
+          item.appendChild(label);
+          item.appendChild(info);
+          item.appendChild(stateText);
+          list.appendChild(item);
+        }
+        self.items[name] = item;
+        self.render(name);
+      });
+    },
+
+    set: function (name, on) {
+      if (state.board[name] === on) { return; }
+      state.board[name] = on;
+      this.render(name);
+    },
+
+    render: function (name) {
+      var on = !!state.board[name];
+      var svgLed = document.querySelector('#uno-board [data-indicator="' + name + '"]');
+      if (svgLed) { svgLed.classList.toggle('is-on', on); }
+      var item = this.items[name];
+      if (item) {
+        item.classList.toggle('is-on', on);
+        item.querySelector('.board-led__state').textContent = on ? 'Encendido' : 'Apagado';
+      }
+    }
+  };
+
+  /* =========================================================
+     A5: motor de simulación.
+     Recorre las acciones ya analizadas por ArduinoParser (A4):
+     setup() una vez y loop() una y otra vez. Nunca vuelve a leer el texto.
+     - Un solo temporizador activo (this.timer).
+     - Cada ejecución tiene un runId: detener o reiniciar lo incrementa y
+       cualquier tarea antigua que despierte se descarta sin tocar los LEDs.
+     - Solo espera en delay(); si loop() casi no espera, se intercala una
+       pausa mínima para no bloquear el navegador.
+     ========================================================= */
+  var SIM_MIN_LOOP_MS = 20;    // pausa mínima entre vueltas de loop() con poca o ninguna espera
+  var SIM_UPLOAD_STEP_MS = 120; // ritmo de la animación educativa de RX/TX
+  var SIM_MAX_SYNC_STEPS = 500; // seguridad: nunca más de 500 acciones seguidas sin ceder el control
+
+  var Simulator = {
+    runId: 0,
+    timer: null,
+    listeners: [],
+
+    onChange: function (listener) { this.listeners.push(listener); },
+
+    emit: function () {
+      this.listeners.forEach(function (listener) { listener(); });
+    },
+
+    isRunning: function () {
+      return state.sim.status === 'running';
+    },
+
+    /* Estado que se muestra: listo, ejecutando, detenido o requiere verificación. */
+    displayStatus: function () {
+      if (this.isRunning()) { return 'running'; }
+      if (!Program.getAnalysis()) { return 'verify'; }
+      return state.sim.status === 'stopped' ? 'stopped' : 'ready';
+    },
+
+    clearTimer: function () {
+      if (this.timer !== null) {
+        window.clearTimeout(this.timer);
+        this.timer = null;
+      }
+    },
+
+    schedule: function (runId, ms, task) {
+      var self = this;
+      this.clearTimer();
+      this.timer = window.setTimeout(function () {
+        self.timer = null;
+        if (runId !== self.runId) { return; } // ejecución cancelada
+        task.call(self, runId);
+      }, ms);
+    },
+
+    /* Invalida cualquier tarea pendiente de ejecuciones anteriores. */
+    cancel: function () {
+      this.runId += 1;
+      this.clearTimer();
+      Indicators.set('RX', false);
+      Indicators.set('TX', false);
+    },
+
+    setPin: function (pin, high) {
+      var pinId = 'D' + pin;
+      state.sim.pins[pin] = high ? 'HIGH' : 'LOW';
+      Circuit.applyPin(pinId, high); // LEDs externos de ese pin (por pin, no por número visible)
+      Object.keys(BOARD.indicators).forEach(function (name) {
+        if (BOARD.indicators[name].linkedPin === pinId) { Indicators.set(name, high); }
+      });
+      if (pin !== 13 && !Circuit.ledOnPin(pinId) && !state.sim.notedPins[pin]) {
+        state.sim.notedPins[pin] = true;
+        this.note('El pin ' + pin + ' está cambiando de estado, pero no tiene un LED externo conectado.');
+      }
+    },
+
+    /* Todos los pines a LOW: apaga LEDs externos y el LED L (ON sigue encendido). */
+    resetPins: function () {
+      for (var pin = 2; pin <= 13; pin++) { state.sim.pins[pin] = 'LOW'; }
+      state.leds.forEach(function (led) { Circuit.applyPin(led.pin, false); });
+      Indicators.set('L', false);
+    },
+
+    message: function (text, type) {
+      state.sim.message = { text: text, type: type };
+      state.sim.notes = [];
+    },
+
+    note: function (text) {
+      if (state.sim.notes.indexOf(text) === -1 && state.sim.notes.length < 3) { state.sim.notes.push(text); }
+      this.emit();
+    },
+
+    run: function () { return this.start(false); },
+    restart: function () { return this.start(true); },
+
+    start: function (isRestart) {
+      var analysis = Program.getAnalysis();
+      if (!analysis) {
+        if (this.isRunning()) { this.stop('code'); }
+        this.message('Primero verifica tu código para asegurarte de que está correctamente escrito.', 'error');
+        this.emit();
+        return false;
+      }
+      if (this.isRunning() && !isRestart) { return false; } // nunca dos simulaciones a la vez
+
+      this.cancel();
+      this.resetPins();
+      var sim = state.sim;
+      sim.program = { setup: analysis.setupActions.slice(), loop: analysis.loopActions.slice() };
+      sim.cursor = { phase: 'upload', index: 0, loopWait: 0 };
+      sim.loops = 0;
+      sim.notedPins = {};
+      sim.status = 'running';
+      sim.current = null;
+      this.message(isRestart ? 'Arduino volvió a comenzar desde setup().' : '¡Tu programa está funcionando! Observa cómo responden los LEDs.', 'ok');
+      this.emit();
+      this.upload(this.runId, 0);
+      return true;
+    },
+
+    /* Animación educativa: RX y TX parpadean como si el programa viajara por USB. */
+    upload: function (runId, stepIndex) {
+      var pattern = ['RX', 'TX', 'RX', 'TX'];
+      if (stepIndex >= pattern.length * 2) {
+        state.sim.cursor.phase = 'setup';
+        state.sim.cursor.index = 0;
+        this.step(runId);
+        return;
+      }
+      var name = pattern[Math.floor(stepIndex / 2)];
+      Indicators.set(name, stepIndex % 2 === 0);
+      state.sim.current = { upload: true };
+      if (stepIndex === 0) { this.emit(); }
+      this.schedule(runId, SIM_UPLOAD_STEP_MS, function (id) { this.upload(id, stepIndex + 1); });
+    },
+
+    step: function (runId) {
+      var sim = state.sim;
+      var program = sim.program;
+      var steps = 0;
+      while (runId === this.runId) {
+        if (steps++ > SIM_MAX_SYNC_STEPS) {
+          this.schedule(runId, SIM_MIN_LOOP_MS, this.step);
+          return;
+        }
+        var cursor = sim.cursor;
+        var list = cursor.phase === 'setup' ? program.setup : program.loop;
+        if (cursor.index >= list.length) {
+          if (cursor.phase === 'setup') {
+            cursor.phase = 'loop';
+            cursor.index = 0;
+            cursor.loopWait = 0;
+            continue;
+          }
+          // Terminó una vuelta de loop(): vuelve a empezar.
+          sim.loops += 1;
+          var waited = cursor.loopWait;
+          cursor.index = 0;
+          cursor.loopWait = 0;
+          if (waited < SIM_MIN_LOOP_MS) {
+            this.schedule(runId, SIM_MIN_LOOP_MS - waited, this.step);
+            return;
+          }
+          continue;
+        }
+        var action = list[cursor.index];
+        cursor.index += 1;
+        sim.current = { line: action.line, phase: cursor.phase, action: action };
+        if (action.type === 'digitalWrite') {
+          this.setPin(action.pin, action.value === 'HIGH');
+        } else if (action.type === 'delay') {
+          if (cursor.phase === 'loop') { cursor.loopWait += action.ms; }
+          this.emit();
+          this.schedule(runId, action.ms, this.step);
+          return;
+        }
+        // pinMode: el pin ya está validado como salida; no cambia nada visible.
+      }
+    },
+
+    stop: function (reason) {
+      var wasRunning = this.isRunning();
+      this.cancel();
+      this.resetPins();
+      state.sim.status = 'stopped';
+      state.sim.current = null;
+      if (reason === 'code') {
+        this.message('Detuvimos la simulación porque cambiaste el código. Verifícalo otra vez para ejecutarlo.', 'info');
+      } else if (reason === 'connections') {
+        this.message('Detuvimos la simulación para cambiar el circuito. Verifica tu código otra vez antes de ejecutarlo.', 'info');
+      } else if (wasRunning) {
+        this.message('Simulación detenida. Detuviste el programa. Puedes modificarlo y volver a ejecutarlo.', 'info');
+      }
+      this.emit();
+    }
+  };
+
+  /* ---------- Vista de la simulación: estado, botones y mensajes ---------- */
+  var SIM_STATUS = {
+    ready: { text: 'Listo', icon: '✓' },
+    running: { text: 'Ejecutando', icon: '▶' },
+    stopped: { text: 'Detenido', icon: '■' },
+    verify: { text: 'Requiere verificación', icon: '!' }
+  };
+
+  var SimView = {
+    els: {},
+
+    init: function () {
+      var self = this;
+      ['sim-status', 'sim-status-text', 'sim-current', 'sim-run', 'sim-stop', 'sim-restart', 'sim-message']
+        .forEach(function (id) { self.els[id] = document.getElementById(id); });
+      if (!this.els['sim-run']) { return; }
+      this.els['sim-run'].addEventListener('click', function () { Simulator.run(); });
+      this.els['sim-stop'].addEventListener('click', function () { Simulator.stop('user'); });
+      this.els['sim-restart'].addEventListener('click', function () { Simulator.restart(); });
+      Simulator.onChange(function () { self.render(); });
+      this.ready = true;
+      this.render();
+    },
+
+    describe: function (action) {
+      if (action.type === 'delay') { return 'delay(' + action.ms + ')'; }
+      if (action.type === 'pinMode') { return 'pinMode(' + action.pin + ', OUTPUT)'; }
+      return 'digitalWrite(' + action.pin + ', ' + action.value + ')';
+    },
+
+    render: function () {
+      if (!this.ready) { return; }
+      var els = this.els;
+      var status = Simulator.displayStatus();
+      var info = SIM_STATUS[status];
+      els['sim-status'].setAttribute('data-status', status);
+      els['sim-status'].querySelector('.sim-status__icon').textContent = info.icon;
+      els['sim-status-text'].textContent = info.text;
+
+      var running = status === 'running';
+      els['sim-run'].disabled = running;
+      els['sim-stop'].disabled = !running;
+      els['sim-restart'].disabled = !Program.getAnalysis();
+
+      var current = state.sim.current;
+      var currentText = '';
+      if (running && current && current.upload) {
+        currentText = 'Enviando tu programa a Arduino. Animación educativa: RX y TX parpadean como en una carga por USB.';
+      } else if (running && current && current.action) {
+        currentText = 'Ahora: línea ' + current.line + ', ' + this.describe(current.action) + ' en ' + current.phase + '()';
+      }
+      els['sim-current'].textContent = currentText;
+      els['sim-current'].hidden = !currentText;
+      Program.markLine(running && current && current.line ? current.line : null);
+
+      var msg = state.sim.message;
+      var box = els['sim-message'];
+      clearEl(box);
+      if (msg) {
+        var main = document.createElement('span');
+        main.className = 'sim-message__main';
+        main.textContent = msg.text;
+        box.appendChild(main);
+        state.sim.notes.forEach(function (text) {
+          var note = document.createElement('span');
+          note.className = 'sim-message__note';
+          note.textContent = text;
+          box.appendChild(note);
+        });
+        box.className = 'sim-message sim-message--' + msg.type;
+      }
+      box.hidden = !msg;
+      Guide.render();
+    }
+  };
+
+  /* =========================================================
+     A5: modo guiado y modo libre. Ambos usan el mismo Simulator.
+     ========================================================= */
+  var Guide = {
+    els: {},
+    signature: '',
+
+    init: function () {
+      var self = this;
+      ['mode-guided', 'mode-free', 'guide-steps', 'free-help', 'guide-progress', 'guide-step', 'guide-prev', 'guide-next']
+        .forEach(function (id) { self.els[id] = document.getElementById(id); });
+      if (!this.els['guide-step']) { return; }
+      [this.els['mode-guided'], this.els['mode-free']].forEach(function (button) {
+        button.addEventListener('click', function () { self.setMode(button.getAttribute('data-mode')); });
+      });
+      this.els['guide-prev'].addEventListener('click', function () { self.go(state.ui.guideStep - 1); });
+      this.els['guide-next'].addEventListener('click', function () { self.go(state.ui.guideStep + 1); });
+      this.els['guide-step'].addEventListener('click', function (event) {
+        var button = event.target.closest('[data-guide-action]');
+        if (!button) { return; }
+        var action = button.getAttribute('data-guide-action');
+        if (action === 'example') { Program.loadExample('blink-external'); }
+        if (action === 'verify') { Program.verify(); }
+        if (action === 'run') { Simulator.run(); }
+      });
+      Circuit.onChange(function () { self.render(); });
+      this.ready = true;
+      this.render();
+    },
+
+    setMode: function (mode) {
+      state.ui.mode = mode === 'free' ? 'free' : 'guided';
+      this.signature = '';
+      this.render();
+    },
+
+    go: function (index) {
+      state.ui.guideStep = Math.max(0, Math.min(2, index));
+      this.signature = '';
+      this.render();
+    },
+
+    steps: function () {
+      var leds = Circuit.getLeds();
+      var onD8 = Circuit.ledOnPin('D8');
+      var verified = !!Program.getAnalysis();
+      var running = Simulator.isRunning();
+      var pin = examplePin(leds); // mismo pin que usará «Cargar ejemplo para mi LED»
+      return [
+        {
+          title: 'Paso 1. Conecta tu LED',
+          short: 'Conecta',
+          main: 'Ve a «Conecta tus LEDs» y conecta un LED. Te recomendamos el pin D8.',
+          more: ['Elige un color y un pin, y presiona «Conectar LED».',
+            'Tu código y tus conexiones se conservan cuando cambias de sección.'],
+          actions: [{ link: '#conecta', label: 'Ir a Conecta', short: 'Ir a Conecta' }],
+          done: leds.length > 0,
+          doneText: onD8 ? 'Listo: tienes un LED en el pin D8.' : 'Listo: ya tienes ' + (leds.length === 1 ? '1 LED conectado' : leds.length + ' LEDs conectados') + '.',
+          pendingText: 'Pendiente: todavía no hay LEDs conectados.'
+        },
+        {
+          title: 'Paso 2. Prepara tu código',
+          short: 'Prepara',
+          main: leds.length
+            ? 'Carga el ejemplo para tu LED del pin D' + pin + ' y presiona «Verificar código».'
+            : 'Carga el ejemplo y presiona «Verificar código». Usará el pin D8.',
+          more: (leds.length ? [] : ['Conecta un LED en el pin D8 para verlo funcionar.']).concat([
+            'pinMode(' + pin + ', OUTPUT) prepara el pin ' + pin + ' como salida.',
+            'digitalWrite(' + pin + ', HIGH) enciende el LED y digitalWrite(' + pin + ', LOW) lo apaga.',
+            'delay(500) espera medio segundo antes de seguir.']),
+          actions: [{ action: 'example', label: 'Cargar ejemplo para mi LED', short: 'Cargar ejemplo' }, { action: 'verify', label: 'Verificar código', short: 'Verificar' }],
+          done: verified,
+          doneText: 'Listo: tu código está verificado.',
+          pendingText: 'Pendiente: verifica tu código.'
+        },
+        {
+          title: 'Paso 3. Ejecuta y observa',
+          short: 'Ejecuta',
+          main: 'Presiona «Ejecutar» y observa tu LED en «Arduino virtual».',
+          more: ['«Detener» apaga todo y «Reiniciar» empieza otra vez desde setup().',
+            'Para cambiar la velocidad, cambia el número de delay(): con delay(200) parpadea más rápido y con delay(1000) más lento. Luego verifica y ejecuta de nuevo.'],
+          actions: [{ action: 'run', label: 'Ejecutar', short: 'Ejecutar' }],
+          done: running,
+          doneText: 'Listo: tu programa está funcionando.',
+          pendingText: verified ? 'Pendiente: presiona «Ejecutar».' : 'Pendiente: primero verifica tu código (paso 2).'
+        }
+      ];
+    },
+
+    render: function () {
+      if (!this.ready) { return; }
+      var els = this.els;
+      var guided = state.ui.mode === 'guided';
+      els['mode-guided'].setAttribute('aria-pressed', guided ? 'true' : 'false');
+      els['mode-free'].setAttribute('aria-pressed', guided ? 'false' : 'true');
+      els['guide-steps'].hidden = !guided;
+      els['guide-progress'].hidden = !guided;
+      els['free-help'].hidden = guided;
+      if (!guided) { return; }
+
+      var steps = this.steps();
+      var index = state.ui.guideStep;
+      var step = steps[index];
+      // Solo se reconstruye (y se anuncia) si cambió algo visible.
+      var signature = index + '|' + steps.map(function (s) { return s.done ? 1 : 0; }).join('') + '|' +
+        step.main + step.more.join('') + (step.done ? step.doneText : step.pendingText);
+      if (signature === this.signature) { return; }
+      this.signature = signature;
+
+      // Mantener abierto «Más información» si el estudiante lo abrió en este paso.
+      var oldMore = els['guide-step'].querySelector('.guide__more');
+      var keepOpen = oldMore && oldMore.open && this.lastIndex === index;
+      this.lastIndex = index;
+
+      var progress = els['guide-progress'];
+      clearEl(progress);
+      steps.forEach(function (s, i) {
+        var li = document.createElement('li');
+        li.className = 'guide__dot' + (s.done ? ' is-done' : '') + (i === index ? ' is-current' : '');
+        if (i === index) { li.setAttribute('aria-current', 'step'); }
+        var mark = document.createElement('span');
+        mark.className = 'guide__mark';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = s.done ? '✓' : String(i + 1);
+        var name = document.createElement('span');
+        name.className = 'guide__name';
+        name.textContent = s.short;
+        var sr = document.createElement('span');
+        sr.className = 'visually-hidden';
+        sr.textContent = 'Paso ' + (i + 1) + ': ' + (s.done ? 'completado. ' : 'pendiente. ');
+        li.appendChild(sr);
+        li.appendChild(mark);
+        li.appendChild(name);
+        progress.appendChild(li);
+      });
+
+      var box = els['guide-step'];
+      clearEl(box);
+      var h = document.createElement('h3');
+      h.className = 'guide__title';
+      h.textContent = step.title;
+      box.appendChild(h);
+      var main = document.createElement('p');
+      main.className = 'guide__main';
+      main.textContent = step.main;
+      box.appendChild(main);
+
+      var row = document.createElement('div');
+      row.className = 'guide__row';
+      var status = document.createElement('p');
+      status.className = 'guide__status' + (step.done ? ' is-done' : '');
+      status.textContent = (step.done ? '✓ ' : '• ') + (step.done ? step.doneText : step.pendingText);
+      row.appendChild(status);
+      var actions = document.createElement('div');
+      actions.className = 'guide__actions';
+      step.actions.forEach(function (a) {
+        var el;
+        if (a.link) {
+          el = document.createElement('a');
+          el.href = a.link;
+        } else {
+          el = document.createElement('button');
+          el.type = 'button';
+          el.setAttribute('data-guide-action', a.action);
+        }
+        el.className = 'btn btn--ghost';
+        if (a.short && a.short !== a.label) {
+          // Texto corto visible en pantallas pequeñas; el nombre accesible es siempre el completo.
+          el.setAttribute('aria-label', a.label);
+          var long = document.createElement('span');
+          long.className = 'lbl-long';
+          long.textContent = a.label;
+          var shortLabel = document.createElement('span');
+          shortLabel.className = 'lbl-short';
+          shortLabel.setAttribute('aria-hidden', 'true');
+          shortLabel.textContent = a.short;
+          el.appendChild(long);
+          el.appendChild(shortLabel);
+        } else {
+          el.textContent = a.label;
+        }
+        actions.appendChild(el);
+      });
+      row.appendChild(actions);
+      box.appendChild(row);
+
+      // «Más información» comparte la fila del estado y las acciones para ahorrar espacio.
+      var more = document.createElement('details');
+      more.className = 'guide__more';
+      if (keepOpen) { more.open = true; }
+      var summary = document.createElement('summary');
+      summary.textContent = 'Más información';
+      more.appendChild(summary);
+      var list = document.createElement('ul');
+      list.className = 'tips';
+      step.more.forEach(function (text) {
+        var li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+      });
+      more.appendChild(list);
+      row.appendChild(more);
+
+      els['guide-prev'].disabled = index === 0;
+      els['guide-next'].disabled = index === steps.length - 1;
     }
   };
 
@@ -2394,6 +3061,9 @@
     CircuitView.init();
     ProgramLedsView.init();
     Program.init();
+    Indicators.init();
+    SimView.init();
+    Guide.init();
     Router.init();
   }
 

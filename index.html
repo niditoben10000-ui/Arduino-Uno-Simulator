@@ -7,7 +7,7 @@
   <title>Arduino Uno Simulator</title>
   <!-- La versión (?v=) obliga al navegador a descargar los archivos nuevos en cada entrega.
        Actualízala cuando cambien style.css o script.js. -->
-  <link rel="stylesheet" href="style.css?v=a4-1">
+  <link rel="stylesheet" href="style.css?v=a5-1">
 </head>
 <body>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
@@ -461,6 +461,41 @@
         <p class="view-header__lead">Escribe instrucciones y observa qué sucede.</p>
       </header>
 
+      <!-- A5.1: panel educativo antes del área de programación -->
+      <div class="panel panel--guide" aria-labelledby="guide-title">
+        <div class="guide__head">
+          <h2 id="guide-title" class="guide__heading">Cómo quieres trabajar</h2>
+          <ol class="guide__progress" id="guide-progress" aria-label="Pasos del modo guiado"></ol>
+          <div class="mode-switch" role="group" aria-label="Modo de trabajo">
+            <button type="button" class="chip" id="mode-guided" data-mode="guided" aria-pressed="true" aria-label="Modo guiado"><span class="chip__check" aria-hidden="true"></span><span class="lbl-long">Modo guiado</span><span class="lbl-short" aria-hidden="true">Guiado</span></button>
+            <button type="button" class="chip" id="mode-free" data-mode="free" aria-pressed="false" aria-label="Modo libre"><span class="chip__check" aria-hidden="true"></span><span class="lbl-long">Modo libre</span><span class="lbl-short" aria-hidden="true">Libre</span></button>
+          </div>
+        </div>
+
+        <div class="guide" id="guide-steps" data-slot="guide-steps">
+          <div class="guide__body">
+            <div class="guide__step" id="guide-step" aria-live="polite"></div>
+            <div class="guide__nav">
+              <button type="button" class="btn btn--ghost" id="guide-prev" aria-label="Paso anterior"><span class="lbl-long">Paso anterior</span><span class="lbl-short" aria-hidden="true">‹ Anterior</span></button>
+              <button type="button" class="btn btn--primary" id="guide-next" aria-label="Siguiente paso"><span class="lbl-long">Siguiente paso</span><span class="lbl-short" aria-hidden="true">Siguiente ›</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="free-help" id="free-help" hidden>
+          <p class="guide__main">Modo libre: escribe tu propio programa, carga ejemplos y experimenta con tus LEDs.</p>
+          <details class="guide__more">
+            <summary>Más información</summary>
+            <ul class="tips">
+              <li>Verifica tu código antes de ejecutarlo.</li>
+              <li>Usa <code>digitalWrite(pin, HIGH)</code> para encender y <code>LOW</code> para apagar.</li>
+              <li>Cambia el número de <code>delay()</code> para cambiar la velocidad: 1000 es un segundo.</li>
+              <li>El pin 13 también controla el LED L de la tarjeta.</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+
       <div class="layout-columns">
         <div class="panel panel--editor" aria-labelledby="editor-title">
           <div class="panel__head">
@@ -493,18 +528,28 @@
             </div>
           </div>
 
-          <div class="toolbar toolbar--sim" role="group" aria-label="Controles de la simulación" aria-describedby="sim-soon">
-            <button type="button" class="btn btn--run" disabled>Ejecutar</button>
-            <button type="button" class="btn btn--stop" disabled>Detener</button>
-            <button type="button" class="btn btn--ghost" disabled>Reiniciar</button>
+          <div class="sim-bar">
+            <p class="sim-status" id="sim-status" data-status="verify">
+              <span class="sim-status__icon" aria-hidden="true"></span>
+              <span><span class="sim-status__label">Estado:</span> <strong id="sim-status-text">Requiere verificación</strong></span>
+            </p>
+            <p class="sim-current" id="sim-current" hidden></p>
           </div>
-          <p class="soon-note" id="sim-soon"><span class="badge">Próximamente</span> Ejecutar, Detener y Reiniciar se activarán cuando agreguemos la simulación. Por ahora puedes escribir y verificar tu programa.</p>
+          <div class="toolbar toolbar--sim" role="group" aria-label="Controles de la simulación">
+            <button type="button" class="btn btn--run" id="sim-run">Ejecutar</button>
+            <button type="button" class="btn btn--stop" id="sim-stop" disabled>Detener</button>
+            <button type="button" class="btn btn--ghost" id="sim-restart" disabled>Reiniciar</button>
+          </div>
         </div>
 
         <div class="side-stack">
           <div class="panel panel--stage" aria-labelledby="virtual-title">
             <h2 id="virtual-title" class="panel__title">Arduino virtual</h2>
             <div class="stage stage--virtual" id="virtual-board" data-slot="virtual-board">
+              <div class="board-leds" aria-labelledby="board-leds-title">
+                <h3 class="board-leds__title" id="board-leds-title">LEDs de la tarjeta</h3>
+                <ul class="board-leds__list" id="board-leds"></ul>
+              </div>
               <ul class="led-slots" id="program-leds" aria-label="LEDs conectados"></ul>
               <p class="stage__empty" id="program-leds-empty">Los LEDs aparecerán aquí cuando los conectes en «Conecta tus LEDs».</p>
             </div>
@@ -513,6 +558,7 @@
           <div class="panel panel--console" aria-labelledby="messages-title">
             <h2 id="messages-title" class="panel__title">Mensajes</h2>
             <div class="console analysis" id="run-messages" data-slot="run-messages">
+              <p class="sim-message" id="sim-message" role="status" aria-live="polite" hidden></p>
               <p class="analysis__status" id="analysis-status" role="status" aria-live="polite"></p>
               <div class="analysis__body" id="analysis-body"></div>
             </div>
@@ -520,10 +566,6 @@
         </div>
       </div>
 
-      <div class="panel panel--guide" aria-labelledby="guide-title">
-        <h2 id="guide-title" class="panel__title">Modo guiado <span class="badge">Próximamente</span></h2>
-        <p class="guide__text" id="guide-steps" data-slot="guide-steps">Aquí verás paso a paso qué escribir para encender tu primer LED.</p>
-      </div>
     </section>
 
   </main>
@@ -532,6 +574,6 @@
     <p>Arduino Uno Simulator: un proyecto educativo para quinto grado.</p>
   </footer>
 
-  <script src="script.js?v=a4-1"></script>
+  <script src="script.js?v=a5-1"></script>
 </body>
 </html>
