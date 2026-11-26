@@ -7,7 +7,7 @@
   <title>Arduino Uno Simulator</title>
   <!-- La versión (?v=) obliga al navegador a descargar los archivos nuevos en cada entrega.
        Actualízala cuando cambien style.css o script.js. -->
-  <link rel="stylesheet" href="style.css?v=a6">
+  <link rel="stylesheet" href="style.css?v=a7">
 </head>
 <body>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
@@ -52,7 +52,13 @@
           <h1 id="titulo-inicio" class="hero__title" tabindex="-1">Arduino Uno Simulator</h1>
           <p class="hero__tagline">Aprende, conecta y programa LEDs</p>
           <p class="hero__intro">¡Vamos a conocer Arduino! Aquí vas a descubrir las partes de la tarjeta, conectar LEDs de colores y escribir instrucciones para encenderlos.</p>
-          <a class="btn btn--primary btn--lg" href="#conoce" data-nav="conoce">Empezar a explorar</a>
+          <div class="hero__actions">
+            <a class="btn btn--primary btn--lg" href="#conoce" data-nav="conoce">Empezar a explorar</a>
+            <a class="btn btn--ghost btn--lg btn--tutorial" id="home-tutorial" href="https://youtu.be/4kLnzn9rl9g" target="_blank" rel="noopener noreferrer">
+              <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M10 8.5v7l6-3.5z"/></svg>
+              <span>Ver tutorial</span><span class="visually-hidden"> (se abre en otra pestaña)</span>
+            </a>
+          </div>
         </div>
 
         <figure class="hero__art">
@@ -574,6 +580,28 @@
     <p>Arduino Uno Simulator: un proyecto educativo para quinto grado.</p>
   </footer>
 
-  <script src="script.js?v=a6"></script>
+  <!-- ===================== BIENVENIDA (A7) =====================
+       Se muestra solo en la primera visita. Se cierra únicamente con sus dos opciones. -->
+  <dialog class="welcome" id="welcome-dialog" aria-labelledby="welcome-title" aria-describedby="welcome-text" closedby="none">
+    <div class="welcome__art" aria-hidden="true">
+      <svg viewBox="0 0 64 64" focusable="false">
+        <rect x="4" y="12" width="56" height="40" rx="12" fill="#008C95"/>
+        <path d="M27 23v18l15-9z" fill="#FFFFFF"/>
+        <circle cx="52" cy="14" r="7" fill="#F4B942"/>
+      </svg>
+    </div>
+    <h2 class="welcome__title" id="welcome-title">¡Bienvenido a Arduino Uno Simulator!</h2>
+    <p class="welcome__text" id="welcome-text">¿Es tu primera vez aquí? Tenemos un video que te enseñará a explorar Arduino, conectar LEDs y programarlos paso a paso.</p>
+    <div class="welcome__actions">
+      <a class="btn btn--primary btn--lg" id="welcome-watch" href="https://youtu.be/4kLnzn9rl9g" target="_blank" rel="noopener noreferrer">
+        <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z"/></svg>
+        <span>Ver video tutorial</span><span class="visually-hidden"> (se abre en otra pestaña)</span>
+      </a>
+      <button type="button" class="btn btn--ghost btn--lg" id="welcome-skip">Omitir</button>
+    </div>
+    <p class="welcome__note">El video se abrirá en otra pestaña y podrás regresar al simulador cuando quieras.</p>
+  </dialog>
+
+  <script src="script.js?v=a7"></script>
 </body>
 </html>

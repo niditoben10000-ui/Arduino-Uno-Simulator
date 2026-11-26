@@ -3040,6 +3040,78 @@
     }
   };
 
+  /* ---------- A7: ventana de bienvenida ---------- */
+  // Aparece solo en la primera visita. Se cierra únicamente con «Ver video tutorial»
+  // (enlace real que abre YouTube en otra pestaña) u «Omitir». La respuesta se guarda
+  // en localStorage; si el navegador lo bloquea, la ventana vuelve a salir en la
+  // siguiente visita, pero la aplicación funciona igual. No se guardan datos personales.
+  var Welcome = {
+    KEY: 'arduino-simulator-tutorial-seen',
+    dialog: null,
+    answered: false,
+
+    seen: function () {
+      try {
+        return window.localStorage.getItem(this.KEY) === 'true';
+      } catch (e) {
+        return false;
+      }
+    },
+
+    remember: function () {
+      try {
+        window.localStorage.setItem(this.KEY, 'true');
+      } catch (e) {
+        // Almacenamiento bloqueado o lleno: se ignora.
+      }
+    },
+
+    init: function () {
+      var self = this;
+      var dialog = document.getElementById('welcome-dialog');
+      if (!dialog || typeof dialog.showModal !== 'function' || this.seen()) {
+        return;
+      }
+      this.dialog = dialog;
+
+      // Escape no cierra la ventana.
+      dialog.addEventListener('cancel', function (event) { event.preventDefault(); });
+      dialog.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.key === 'Esc') { event.preventDefault(); }
+      });
+      // Si el navegador la cerrara por su cuenta sin respuesta, se vuelve a abrir.
+      dialog.addEventListener('close', function () {
+        if (!self.answered) { self.open(); }
+      });
+
+      // El enlace sigue su acción normal (nueva pestaña); solo se cierra la ventana.
+      document.getElementById('welcome-watch').addEventListener('click', function () { self.answer(); });
+      document.getElementById('welcome-skip').addEventListener('click', function () { self.answer(); });
+
+      this.open();
+    },
+
+    open: function () {
+      try {
+        if (!this.dialog.open) { this.dialog.showModal(); }
+      } catch (e) {
+        return;
+      }
+      document.getElementById('welcome-watch').focus();
+    },
+
+    answer: function () {
+      if (this.answered) { return; }
+      this.answered = true;
+      this.remember();
+      this.dialog.close();
+      // Devuelve el foco al título de la vista actual (no hay otro foco previo en la primera carga).
+      var view = document.querySelector('[data-view="' + state.currentView + '"]');
+      var heading = view && view.querySelector('h1');
+      if (heading) { heading.focus({ preventScroll: true }); }
+    }
+  };
+
   /* ---------- Preparación de vistas (contenido estático) ---------- */
   function renderPinOptions() {
     var select = document.getElementById('pin-select');
@@ -3065,6 +3137,7 @@
     SimView.init();
     Guide.init();
     Router.init();
+    Welcome.init();
   }
 
   if (document.readyState === 'loading') {
